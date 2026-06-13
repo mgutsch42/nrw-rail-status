@@ -1,6 +1,1 @@
 blank_issues_enabled: true
-
-contact_links:
-  - name: "Blank issue"
-    url: "https://github.com/mgutsch42/nrw-rail-status/issues/new"
-    about: "Erstelle ein freies Issue ohne Template"
