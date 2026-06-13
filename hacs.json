@@ -1,0 +1,9 @@
+{
+  "name": "NRW Rail Status",
+  "render_readme": true,
+  "country": "DE",
+  "homeassistant": "2024.0.0",
+  "persistent_directory": "custom_components/nrw_rail_status",
+  "iot_class": "cloud_polling",
+  "info": "Nach der Installation oder Aktualisierung dieser Integration ist ein Neustart von Home Assistant erforderlich, damit die Dateien im Ordner 'custom_components' korrekt geladen werden."
+}
