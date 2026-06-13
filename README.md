@@ -1,69 +1,105 @@
-# NRW Rail Status – Home Assistant Integration
+NRW Rail Status – Home Assistant Integration
+⚠️ Aktueller Status
+Die bisherige Datenquelle (Zuginfo.nrw / HIM‑API) liefert seit einer API‑Änderung keine stabilen oder vollständigen Daten mehr.
+Die Integration funktioniert technisch, aber die API liefert:
 
-Diese Home‑Assistant‑Integration zeigt aktuelle Störungen, Baustellen und Meldungen aus dem NRW‑Bahnnetz an.  
-Die Daten stammen aus der offiziellen **Zuginfo.nrw‑HIM‑API** (HimSearch).
+HAMM‑Fehler
 
----
+leere oder unvollständige JSON‑Antworten
 
-## 🚆 Funktionsumfang
+abweichende Strukturen gegenüber bekannten HAFAS/HIM‑Implementierungen
 
-- Live‑Abruf der NRW‑HIM‑API (HimSearch)
-- Anzeige der **aktuellen Anzahl von Störungen**
-- Detailinformationen zur **ersten Störung**
-- Vollständige Liste aller Meldungen (Titel, Text, Zeitraum, Priorität, Verbund)
-- Automatische Aktualisierung über einen Update‑Coordinator
-- 100% kompatibel mit Standard‑Home‑Assistant‑Karten
+Das Projekt befindet sich daher aktuell in einer Analyse‑ und Übergangsphase.
 
----
+👉 Aktueller Stand & Diskussion:
+https://github.com/mgutsch42/nrw-rail-status/issues/2
 
-## 📦 Installation über HACS (manuell)
+🤝 Hinweis für Contributor
+Dieses Projekt ist ein Community‑Projekt.
+Ich selbst bin kein Experte für HAFAS/HIM‑APIs oder Reverse‑Engineering und lerne vieles gerade erst kennen.
 
-1. HACS → **Integrationen**
-2. Rechts oben: **Custom repositories**
-3. Folgende URL eintragen:
+Ich kann:
 
-   https://github.com/mgutsch42/nrw-rail-status
+das Projekt koordinieren
 
-4. Typ: **Integration**
-5. Repository hinzufügen
-6. Integration installieren
-7. Home Assistant neu starten
-8. Integration hinzufügen: **NRW Rail Status**
+testen
 
----
+dokumentieren
 
-## ⚙️ Konfiguration
+die Integration weiterentwickeln
 
-Die Integration nutzt einen **Config‑Flow**, es ist keine YAML‑Konfiguration notwendig.
+Aber ich bin auf fachliche Unterstützung bei der API‑Analyse angewiesen.
+
+Kurz gesagt:  
+Ich bringe Struktur, Motivation und die Integration selbst mit —
+die Community bringt das API‑Know‑how mit.
+
+Jede Hilfe ist willkommen: Hinweise, Tests, Logs, Code.
+
+🚆 Funktionsumfang
+Live‑Abruf der NRW‑HIM‑API (HimSearch)
+
+Anzeige der aktuellen Anzahl von Störungen
+
+Detailinformationen zur ersten Störung
+
+Vollständige Liste aller Meldungen (Titel, Text, Zeitraum, Priorität, Verbund)
+
+Automatische Aktualisierung über einen Update‑Coordinator
+
+100% kompatibel mit Standard‑Home‑Assistant‑Karten
+
+📦 Installation über HACS (manuell)
+HACS → Integrationen
+
+Rechts oben: Custom repositories
+
+Folgende URL eintragen:
+
+Code
+https://github.com/mgutsch42/nrw-rail-status
+Typ: Integration
+
+Repository hinzufügen
+
+Integration installieren
+
+Home Assistant neu starten
+
+Integration hinzufügen: NRW Rail Status
+
+⚙️ Konfiguration
+Die Integration nutzt einen Config‑Flow, es ist keine YAML‑Konfiguration notwendig.
 
 Nach der Einrichtung erscheint ein Sensor:
 
-  sensor.nrw_rail_status_sensor
+Code
+sensor.nrw_rail_status_sensor
+🧠 Sensor‑Daten
+State
+Anzahl der aktiven Störungen
 
+Attribute
+first_title – Titel der ersten Meldung
 
----
+first_text – Beschreibung (Markdown)
 
-## 🧠 Sensor‑Daten
+first_start – Startzeitpunkt
 
-### **State**
-- Anzahl der aktiven Störungen
+first_end – Endzeitpunkt
 
-### **Attribute**
-- `first_title` – Titel der ersten Meldung  
-- `first_text` – Beschreibung (Markdown)  
-- `first_start` – Startzeitpunkt  
-- `first_end` – Endzeitpunkt  
-- `first_priority` – Priorität  
-- `first_comp` – Verbund (z. B. VRR, NWL)  
-- `first_product` – Produktklasse  
-- `first_id` – Meldungs‑ID  
-- `messages` – Liste aller Meldungen als strukturierte Objekte
+first_priority – Priorität
 
----
+first_comp – Verbund (z. B. VRR, NWL)
 
-## 📊 Beispiel‑Dashboard (Standard‑HA‑Karten)
+first_product – Produktklasse
 
-```yaml
+first_id – Meldungs‑ID
+
+messages – Liste aller Meldungen als strukturierte Objekte
+
+📊 Beispiel‑Dashboard (Standard‑HA‑Karten)
+yaml
 title: NRW Rail Status
 icon: mdi:train
 cards:
@@ -127,6 +163,38 @@ cards:
       {% else %}
       Keine Störungen vorhanden.
       {% endif %}
+🧩 Technische Details
+Die Integration basiert auf:
 
+Config Flow — UI‑basierte Einrichtung
 
-  
+DataUpdateCoordinator — zyklische API‑Abfrage
+
+Sensor‑Plattform — strukturierte Attribute
+
+Logging — Debug‑Ausgaben
+
+Asynchronem HTTP‑Client (aiohttp)
+
+Der technische Unterbau ist stabil — es fehlt lediglich eine zuverlässige Datenquelle.
+
+🧪 Was bereits getestet wurde
+direkte API‑Abfragen über Browser, Postman und aiohttp
+
+GET‑ und POST‑Varianten der HIM‑Endpunkte
+
+Parameter wie format=json, limit, filter
+
+Analyse der Netzwerk‑Requests der NRW‑Webseite
+
+Vergleich mit HAFAS/HIM anderer Verkehrsverbünde
+
+Debug‑Logging der Integration
+
+Tests alternativer Datenquellen (VRR, NVR, NWL, DB, GTFS‑RT)
+
+Ergebnis:  
+Die API liefert derzeit keine stabile, verwertbare Struktur.
+
+📄 Lizenz
+Wird später ergänzt.
