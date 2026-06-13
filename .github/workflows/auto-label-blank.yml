@@ -1,14 +1,24 @@
 name: Auto Label Blank Issues
+
 on:
   issues:
     types: [opened]
 
 jobs:
-  label:
+  label_blank:
     runs-on: ubuntu-latest
     steps:
+      - name: Check if issue has no labels (Blank Issue)
+        id: check
+        uses: actions-ecosystem/action-has-labels@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          labels: ""
+
       - name: Add default label to blank issues
+        if: steps.check.outputs.has_labels == 'false'
         uses: actions-ecosystem/action-add-labels@v1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           labels: "discussion"
+
