@@ -175,6 +175,180 @@ Falls der Server statt JSON eine Login‑Seite liefert, erkennt die Integration 
 
 Dies erleichtert das Debugging bei API‑Änderungen.
 
+## 🧪 Erweiterte Debugging‑Historie & Testläufe
+
+Um anderen Entwicklern die erneute Fehlersuche zu ersparen, dokumentiert dieser Abschnitt **alle bisherigen Testläufe**, **Hypothesen**, **Fehlerbilder** und **Erkenntnisse**, die während der Reverse‑Engineering‑Phase gesammelt wurden.
+
+Diese Informationen sollen helfen, die Schutzmechanismen der Zuginfo.nrw‑HAFAS‑HIM‑API besser zu verstehen und zukünftige Lösungsansätze gezielt zu entwickeln.
+
+---
+
+### 🔍 1. Domain‑Konsistenz
+
+**Hypothese:**  
+Die API akzeptiert Cookies nur, wenn alle Requests dieselbe Domain verwenden.
+
+**Tests:**  
+- GET/POST auf `https://www.zuginfo.nrw/`  
+- GET/POST auf `https://zuginfo.nrw/`  
+- Mischung aus beiden Domains  
+
+**Ergebnis:**  
+- Cookies werden **nie** gesetzt, wenn Domains gemischt werden  
+- Auch bei konsistenter Domain: **keine Cookies**  
+- Domain‑Mismatch ist **nicht** die alleinige Ursache
+
+---
+
+### 🔍 2. Header‑Fingerprinting
+
+**Hypothese:**  
+Die API setzt Cookies nur, wenn bestimmte Browser‑Header exakt nachgebildet werden.
+
+**Tests:**  
+- Vollständige Chrome‑Header (Android)  
+- Vollständige Chrome‑Header (Desktop)  
+- Minimal‑Header (Accept, Origin, Referer)  
+- Entfernen aller `Sec-*` Header  
+- Entfernen von `Accept-Encoding`  
+- Variation von `User-Agent`  
+
+**Ergebnis:**  
+- Falscher Referer → **immer** keine Cookies  
+- Falscher Accept‑Header → **immer** keine Cookies  
+- Korrekte Header → **trotzdem** keine Cookies  
+- Fingerprinting ist **nicht** der einzige Blocker
+
+---
+
+### 🔍 3. Referer‑ und Origin‑Validierung
+
+**Hypothese:**  
+Die API akzeptiert nur Requests, die wie echte WebApp‑Requests aussehen.
+
+**Tests:**  
+- Referer: `/`  
+- Referer: `/webapp/`  
+- Origin: `https://www.zuginfo.nrw`  
+- Origin: `https://zuginfo.nrw`  
+
+**Ergebnis:**  
+- Falscher Referer → sofortiger HTML‑Fallback  
+- Richtiger Referer → kein HTML‑Fallback, aber **keine Cookies**  
+- Origin spielt eine Rolle, ist aber nicht allein entscheidend
+
+---
+
+### 🔍 4. PRE‑Request auf `/webapp/`
+
+**Hypothese:**  
+Die WebApp initialisiert eine Session über einen GET‑Request.
+
+**Tests:**  
+- GET auf `/webapp/`  
+- GET auf `/webapp/index.html`  
+- GET auf `/`  
+
+**Ergebnis:**  
+- Keine Cookies werden gesetzt  
+- PRE‑Request ist **notwendig**, aber **nicht ausreichend**
+
+---
+
+### 🔍 5. POST‑Request‑Analyse
+
+**Hypothese:**  
+Der Payload muss exakt dem WebApp‑Payload entsprechen.
+
+**Tests:**  
+- Payload aus DevTools übernommen  
+- Payload minimalisiert  
+- Payload mit anderen HAFAS‑Parametern  
+- Variation von `hciVersion`, `hciClientVersion`, `aid`, `ext`, `l`, `v`  
+
+**Ergebnis:**  
+- Falscher Payload → HTML‑Fallback  
+- Richtiger Payload → **keine Cookies**, aber auch kein HTML  
+- Payload ist **nicht** der alleinige Blocker  
+- Vermutlich zusätzliche serverseitige Validierung
+
+---
+
+### 🔍 6. Cookie‑Debugging
+
+**Hypothese:**  
+Cookies werden gesetzt, aber aiohttp speichert sie nicht.
+
+**Tests:**  
+- Cookie‑Jar‑Debugging vor/nach POST  
+- Cookie‑Filterung auf Domain vs. Subdomain  
+- Logging aller Set‑Cookie‑Header  
+
+**Ergebnis:**  
+- Server sendet **keine** Set‑Cookie‑Header  
+- Problem liegt **nicht** in aiohttp  
+- Cookies werden serverseitig **nicht erzeugt**
+
+---
+
+### 🔍 7. HTML‑Fallback‑Erkennung
+
+**Hypothese:**  
+Der Server liefert HTML statt JSON, wenn die Session ungültig ist.
+
+**Tests:**  
+- Prüfung von `Content-Type`  
+- Prüfung auf `<html>` im Response‑Body  
+- Logging der ersten 500 Zeichen  
+
+**Ergebnis:**  
+- HTML‑Fallback tritt nur bei falschem Referer auf  
+- Bei korrekten Headern → **kein HTML**, aber **keine Cookies**  
+- Server akzeptiert Request formal, aber verweigert Session
+
+---
+
+### 🔍 8. Vermutete Schutzmechanismen
+
+Basierend auf allen Tests sind folgende Mechanismen wahrscheinlich:
+
+- **Browser‑Fingerprinting** (Header‑Kombinationen, UA‑Patterns)  
+- **TLS‑Fingerprinting** (Cipher Suites, JA3‑Hash)  
+- **Request‑Timing‑Analyse** (PRE → POST Sequenz)  
+- **Client‑Token‑Generierung** (JS‑seitig)  
+- **Anti‑Bot‑Mechanismen** (Rate‑Limits, Heuristiken)  
+
+Diese Mechanismen sind typisch für moderne HAFAS‑Installationen.
+
+---
+
+### 📌 Zwischenfazit
+
+Trotz vollständiger Nachbildung:
+
+- der Domain  
+- der Header  
+- des Referers  
+- des Origins  
+- des Payloads  
+- der Request‑Sequenz  
+- der Browser‑Emulation  
+
+setzt der Server **keine Session‑Cookies**.
+
+Damit ist ein vollwertiger API‑Zugriff derzeit **nicht möglich**.
+
+---
+
+### 🧭 Nächste Schritte (für zukünftige Entwickler)
+
+- Analyse des TLS‑Fingerprints (JA3)  
+- Replay echter Browser‑Requests über Proxy  
+- Nutzung eines Headless‑Browsers (Playwright/Selenium)  
+- Untersuchung der JS‑Token‑Generierung  
+- Vergleich der Request‑Sequenz mit HAR‑Export  
+- Prüfung auf serverseitige Bot‑Detection  
+
 ---
 
 ## ⚠️ Aktueller Status der Integration
