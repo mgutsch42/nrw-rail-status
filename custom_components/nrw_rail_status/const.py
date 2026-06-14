@@ -13,7 +13,7 @@ SENSOR_NAME = "NRW Rail Status"
 # -----------------------------
 
 # Base URL for the Zuginfo NRW gateway
-BASE_URL = "https://www.zuginfo.nrw/gate/"
+BASE_URL = "https://zuginfo.nrw/gate/"
 
 # HAFAS API version
 HAFAS_VERSION = "1.24"
