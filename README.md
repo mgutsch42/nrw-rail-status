@@ -211,6 +211,18 @@ Bis dahin dient das Projekt als technische Referenz und Dokumentation der HAFAS/
 
 ---
 
+## 🤝 Beiträge & Community
+
+Beiträge sind ausdrücklich willkommen!
+
+- Siehe **CONTRIBUTING.md** im gleichen Verzeichnis wie diese README  
+- Fehler melden: GitHub → *Issues*  
+- Ideen, Fragen, Diskussionen: GitHub → *Discussions*  
+
+Jede Unterstützung hilft, die Integration langfristig funktionsfähig zu machen.
+
+---
+
 ## 📄 Lizenz
 
 MIT License
