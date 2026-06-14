@@ -35,22 +35,28 @@ class NRWRailStatusCoordinator(DataUpdateCoordinator):
 
     async def _async_update_data(self):
         """Fetch data from the API with retry and error handling."""
+
+        _LOGGER.debug("Coordinator update triggered")
+
         try:
             messages = await self.api.fetch_messages()
 
-            # Prüfen, ob die API gültige Daten geliefert hat
             if not messages:
+                _LOGGER.warning("API returned no messages (empty result)")
                 raise UpdateFailed("API returned no messages (empty result).")
 
+            _LOGGER.debug("Coordinator received %s HIM messages", len(messages))
             return messages
 
         except UpdateFailed:
+            # Bereits klassifizierter Fehler → direkt weiterreichen
             raise
 
         except Exception as err:
-            # HAFAS-spezifische Fehler erkennen
             err_str = str(err)
+            _LOGGER.error("Unexpected error in coordinator: %s", err_str)
 
+            # HAFAS-spezifische Fehler erkennen
             if "hammError" in err_str:
                 raise UpdateFailed("HAFAS returned hammError (invalid session or payload).")
 
@@ -62,3 +68,4 @@ class NRWRailStatusCoordinator(DataUpdateCoordinator):
 
             # Generischer Fehler
             raise UpdateFailed(f"Unexpected error fetching NRW HIM data: {err_str}") from err
+
