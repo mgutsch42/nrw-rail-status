@@ -255,6 +255,20 @@ class NRWHimApi:
             raw_text = await resp.text()
 
             _LOGGER.debug("RAW POST RESPONSE: %s", raw_text)
+        # Schritt 3b: Cookie-Debug nach POST
+       raw_text = await resp.text()
+        _LOGGER.debug("RAW POST RESPONSE: %s", raw_text)
+
+        # Schritt 3b: Cookie-Debug nach POST
+        _LOGGER.error("Cookies after POST: %s",
+                      self.session.cookie_jar.filter_cookies(BASE_URL))
+
+        # Wenn der Server HTML statt JSON liefert → Hinweis ausgeben
+        if "html" in resp.headers.get("Content-Type", "").lower():
+            _LOGGER.error("Server lieferte HTML statt JSON. Vermutlich fehlende Session.")
+            _LOGGER.error("Erste 500 Zeichen HTML: %s", raw_text[:500])
+            return []
+ 
         # Schritt 4: JSON-Antwort parsen
         try:
             data = await resp.json(content_type=None)
