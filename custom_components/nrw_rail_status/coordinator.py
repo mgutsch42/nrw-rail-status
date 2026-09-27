@@ -37,7 +37,7 @@ class NRWRailStatusCoordinator(DataUpdateCoordinator):
         self.api = NRWHimApi(session)
 
     async def _async_update_data(self):
-        """Fetch data from the API with retry, error handling, and exact line filtering."""
+        """Fetch data from the API with exact line filtering and deduplication."""
 
         _LOGGER.debug("Coordinator update triggered")
 
@@ -50,52 +50,67 @@ class NRWRailStatusCoordinator(DataUpdateCoordinator):
 
             _LOGGER.debug("Coordinator received %s raw HIM messages", len(messages))
 
-            # -------------------------------------------------------------
-            # Exakte Linien-Filterung anwenden
-            # -------------------------------------------------------------
             filtered_lines = self.entry.options.get("filtered_lines", [])
 
-            # Wenn keine Filter gesetzt sind -> alle Meldungen behalten
+            # -------------------------------------------------------------
+            # 1. Exakte Linien-Filterung anwenden
+            # -------------------------------------------------------------
+            candidate_messages = []
             if not filtered_lines:
-                return messages
+                candidate_messages = messages
+            else:
+                for msg in messages:
+                    # Extrahiere alle Produktnamen (z. B. "RE 4", "S 8")
+                    raw_products = getattr(msg, "products", []) or []
+                    product_names = [
+                        p.get("name", "") if isinstance(p, dict) else getattr(p, "name", str(p))
+                        for p in raw_products
+                    ]
 
-            filtered_messages = []
-            for msg in messages:
-                # Extrahiere alle Produktnamen (z. B. "RE 44", "S 8")
-                raw_products = getattr(msg, "products", []) or []
-                product_names = [
-                    p.get("name", "") if isinstance(p, dict) else getattr(p, "name", str(p))
-                    for p in raw_products
-                ]
+                    msg_title = getattr(msg, "title", "") or ""
+                    msg_text = getattr(msg, "text", "") or ""
 
-                msg_title = getattr(msg, "title", "") or ""
-                msg_text = getattr(msg, "text", "") or ""
+                    match = False
+                    for line in filtered_lines:
+                        # Exakter Abgleich im Produkte-Array
+                        if line in product_names:
+                            match = True
+                            break
 
-                match = False
-                for line in filtered_lines:
-                    # 1. Exakter Abgleich im Produkte-Array (z. B. "RE 4" == "RE 4")
-                    if line in product_names:
-                        match = True
-                        break
+                        # Wortgrenzen-Regex für Titel & Text (verhindert z.B. "RE 4" Matching bei "RE 44")
+                        pattern = r"\b" + re.escape(line).replace(r"\ ", r"\s*") + r"\b"
+                        if re.search(pattern, msg_title, re.IGNORECASE) or re.search(pattern, msg_text, re.IGNORECASE):
+                            match = True
+                            break
 
-                    # 2. Wortgrenzen-Regex für Titel & Text (verhindert "RE 4" Matching bei "RE 44")
-                    # Erstellt z. B. r'\bRE\s*4\b'
-                    pattern = r"\b" + re.escape(line).replace(r"\ ", r"\s*") + r"\b"
-                    if re.search(pattern, msg_title, re.IGNORECASE) or re.search(pattern, msg_text, re.IGNORECASE):
-                        match = True
-                        break
+                    if match:
+                        candidate_messages.append(msg)
 
-                if match:
-                    filtered_messages.append(msg)
+            # -------------------------------------------------------------
+            # 2. Deduplizierung: Identische Titel + Texte herausfiltern
+            # -------------------------------------------------------------
+            unique_messages = []
+            seen_signatures = set()
+
+            for msg in candidate_messages:
+                title = (getattr(msg, "title", "") or "").strip()
+                text = (getattr(msg, "text", "") or "").strip()
+
+                # Kombination aus Titel und Text als eindeutiger Schlüssel
+                signature = (title, text)
+
+                if signature not in seen_signatures:
+                    seen_signatures.add(signature)
+                    unique_messages.append(msg)
 
             _LOGGER.debug(
-                "Filtered %s messages down to %s for selected lines: %s",
+                "Filtered %s raw messages down to %s unique messages for selected lines: %s",
                 len(messages),
-                len(filtered_messages),
+                len(unique_messages),
                 filtered_lines,
             )
 
-            return filtered_messages
+            return unique_messages
 
         except UpdateFailed:
             raise
