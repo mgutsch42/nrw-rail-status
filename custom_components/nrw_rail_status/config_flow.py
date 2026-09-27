@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from typing import Any
 import voluptuous as vol
+
 from homeassistant import config_entries
+from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.core import callback
 from homeassistant.helpers.selector import (
     SelectSelector,
@@ -11,7 +14,7 @@ from homeassistant.helpers.selector import (
     SelectSelectorMode,
 )
 
-from .const import DOMAIN, NRW_LINES
+from .const import CATEGORY_EXCLUDE_OPTIONS, DOMAIN, NRW_LINES
 
 
 class NRWRailStatusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -19,11 +22,10 @@ class NRWRailStatusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
-    async def async_step_user(self, user_input=None):
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
         """Handle the initial step when adding the integration."""
-        if self._async_current_entries():
-            return self.async_abort(reason="single_instance_allowed")
-
         if user_input is not None:
             return self.async_create_entry(title="NRW Rail Status", data={})
 
@@ -33,21 +35,27 @@ class NRWRailStatusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @callback
     def async_get_options_flow(
         config_entry: config_entries.ConfigEntry,
-    ) -> NRWRailStatusOptionsFlowHandler:
+    ) -> config_entries.OptionsFlow:
         """Get the options flow for this handler."""
-        return NRWRailStatusOptionsFlowHandler()
+        return NRWRailStatusOptionsFlowHandler(config_entry)
 
 
 class NRWRailStatusOptionsFlowHandler(config_entries.OptionsFlow):
     """Handle options flow for NRW Rail Status."""
 
-    async def async_step_init(self, user_input=None):
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        """Initialize options flow."""
+        self.config_entry = config_entry
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
         """Manage the options menu in HA."""
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        # HA liest config_entry automatisch über self.config_entry
         selected_lines = self.config_entry.options.get("filtered_lines", [])
+        excluded_categories = self.config_entry.options.get("excluded_categories", [])
 
         schema = vol.Schema(
             {
@@ -56,6 +64,18 @@ class NRWRailStatusOptionsFlowHandler(config_entries.OptionsFlow):
                         options=NRW_LINES,
                         multiple=True,
                         mode=SelectSelectorMode.DROPDOWN,
+                    )
+                ),
+                vol.Optional(
+                    "excluded_categories", default=excluded_categories
+                ): SelectSelector(
+                    SelectSelectorConfig(
+                        options=[
+                            {"value": k, "label": v}
+                            for k, v in CATEGORY_EXCLUDE_OPTIONS.items()
+                        ],
+                        multiple=True,
+                        mode=SelectSelectorMode.CHECKBOXES,
                     )
                 ),
             }
