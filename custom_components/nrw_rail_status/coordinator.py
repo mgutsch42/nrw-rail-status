@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
@@ -36,7 +37,7 @@ class NRWRailStatusCoordinator(DataUpdateCoordinator):
         self.api = NRWHimApi(session)
 
     async def _async_update_data(self):
-        """Fetch data from the API with retry, error handling, and line filtering."""
+        """Fetch data from the API with retry, error handling, and exact line filtering."""
 
         _LOGGER.debug("Coordinator update triggered")
 
@@ -50,7 +51,7 @@ class NRWRailStatusCoordinator(DataUpdateCoordinator):
             _LOGGER.debug("Coordinator received %s raw HIM messages", len(messages))
 
             # -------------------------------------------------------------
-            # Linien-Filter anwenden
+            # Exakte Linien-Filterung anwenden
             # -------------------------------------------------------------
             filtered_lines = self.entry.options.get("filtered_lines", [])
 
@@ -60,20 +61,27 @@ class NRWRailStatusCoordinator(DataUpdateCoordinator):
 
             filtered_messages = []
             for msg in messages:
-                # Produkte/Linien-Liste aus der Meldung abrufen
-                msg_products = getattr(msg, "products", [])
-                msg_title = getattr(msg, "title", "")
-                msg_text = getattr(msg, "text", "")
+                # Extrahiere alle Produktnamen (z. B. "RE 44", "S 8")
+                raw_products = getattr(msg, "products", []) or []
+                product_names = [
+                    p.get("name", "") if isinstance(p, dict) else getattr(p, "name", str(p))
+                    for p in raw_products
+                ]
 
-                # Prüfen, ob eine der ausgewählten Linien passt
+                msg_title = getattr(msg, "title", "") or ""
+                msg_text = getattr(msg, "text", "") or ""
+
                 match = False
                 for line in filtered_lines:
-                    # Direkter Treffer in Produkten oder Erwähnung im Titel/Text
-                    if (
-                        line in msg_products
-                        or line in msg_title
-                        or line in msg_text
-                    ):
+                    # 1. Exakter Abgleich im Produkte-Array (z. B. "RE 4" == "RE 4")
+                    if line in product_names:
+                        match = True
+                        break
+
+                    # 2. Wortgrenzen-Regex für Titel & Text (verhindert "RE 4" Matching bei "RE 44")
+                    # Erstellt z. B. r'\bRE\s*4\b'
+                    pattern = r"\b" + re.escape(line).replace(r"\ ", r"\s*") + r"\b"
+                    if re.search(pattern, msg_title, re.IGNORECASE) or re.search(pattern, msg_text, re.IGNORECASE):
                         match = True
                         break
 
@@ -90,14 +98,12 @@ class NRWRailStatusCoordinator(DataUpdateCoordinator):
             return filtered_messages
 
         except UpdateFailed:
-            # Bereits klassifizierter Fehler → direkt weiterreichen
             raise
 
         except Exception as err:
             err_str = str(err)
             _LOGGER.error("Unexpected error in coordinator: %s", err_str)
 
-            # HAFAS-spezifische Fehler erkennen
             if "hammError" in err_str:
                 raise UpdateFailed("HAFAS returned hammError (invalid session or payload).")
 
@@ -107,5 +113,4 @@ class NRWRailStatusCoordinator(DataUpdateCoordinator):
             if "HCI" in err_str:
                 raise UpdateFailed(f"HAFAS internal error: {err_str}")
 
-            # Generischer Fehler
             raise UpdateFailed(f"Unexpected error fetching NRW HIM data: {err_str}") from err
