@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -24,73 +24,78 @@ async def async_setup_entry(
 ) -> None:
     """Set up NRW Rail Status sensors based on config entry."""
     coordinator: NRWRailStatusDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
-
     selected_lines = entry.options.get(CONF_LINES) or entry.data.get(CONF_LINES) or []
 
     entities = []
     if selected_lines:
         for line in selected_lines:
-            entities.append(NRWRailStatusLineSensor(coordinator, line))
+            entities.append(NRWRailStatusLineSensor(coordinator, line, entry))
     else:
-        entities.append(NRWRailStatusOverviewSensor(coordinator))
+        entities.append(NRWRailStatusOverviewSensor(coordinator, entry))
 
     async_add_entities(entities)
 
 
-class NRWRailStatusOverviewSensor(CoordinatorEntity[NRWRailStatusDataUpdateCoordinator], SensorEntity):
+class NRWRailStatusOverviewSensor(
+    CoordinatorEntity[NRWRailStatusDataUpdateCoordinator], SensorEntity
+):
     """Sensor showing overall messages count."""
 
     _attr_has_entity_name = True
     _attr_icon = "mdi:train"
+    _attr_state_class = SensorStateClass.MEASUREMENT
 
-    def __init__(self, coordinator: NRWRailStatusDataUpdateCoordinator) -> None:
-        """Initialize overview sensor."""
+    def __init__(
+        self, coordinator: NRWRailStatusDataUpdateCoordinator, entry: ConfigEntry
+    ) -> None:
         super().__init__(coordinator)
-        self._attr_unique_id = f"{DOMAIN}_overview"
+        self._attr_unique_id = f"{entry.entry_id}_overview"
         self._attr_name = "NRW Rail Status Gesamt"
 
     @property
     def native_value(self) -> int:
-        """Return total active messages count."""
-        if not self.coordinator.data:
-            return 0
-        return len(self.coordinator.data)
+        return len(self.coordinator.data) if self.coordinator.data else 0
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return details for all messages."""
         if not self.coordinator.data:
             return {"messages": []}
 
-        messages_data = []
-        for msg in self.coordinator.data:
-            messages_data.append(
+        return {
+            "messages": [
                 {
-                    "id": msg.id,
-                    "title": msg.title,
-                    "text": msg.text,
-                    "products": [p.get("name") for p in msg.products if p.get("name")],
+                    "id": m.id,
+                    "title": m.title,
+                    "text": m.text,
+                    "products": [p.get("name") for p in m.products if p.get("name")],
                 }
-            )
-        return {"messages": messages_data}
+                for m in self.coordinator.data
+            ]
+        }
 
 
-class NRWRailStatusLineSensor(CoordinatorEntity[NRWRailStatusDataUpdateCoordinator], SensorEntity):
+class NRWRailStatusLineSensor(
+    CoordinatorEntity[NRWRailStatusDataUpdateCoordinator], SensorEntity
+):
     """Sensor for a specific train/bus line."""
 
     _attr_has_entity_name = True
     _attr_icon = "mdi:train"
+    _attr_state_class = SensorStateClass.MEASUREMENT
 
-    def __init__(self, coordinator: NRWRailStatusDataUpdateCoordinator, line: str) -> None:
-        """Initialize line sensor."""
+    def __init__(
+        self,
+        coordinator: NRWRailStatusDataUpdateCoordinator,
+        line: str,
+        entry: ConfigEntry,
+    ) -> None:
         super().__init__(coordinator)
         self.line = line
-        self._attr_unique_id = f"{DOMAIN}_line_{line.lower()}"
+        self._attr_unique_id = f"{entry.entry_id}_line_{line.lower()}"
         self._attr_name = f"NRW Rail Status {line}"
 
     @property
     def native_value(self) -> int:
-        """Return number of disruptions for this line."""
         return len(self._get_line_messages())
 
     def _get_line_messages(self) -> list:
@@ -109,16 +114,8 @@ class NRWRailStatusLineSensor(CoordinatorEntity[NRWRailStatusDataUpdateCoordinat
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return details for line-specific messages."""
         msgs = self._get_line_messages()
         return {
             "disruption_count": len(msgs),
-            "messages": [
-                {
-                    "id": m.id,
-                    "title": m.title,
-                    "text": m.text,
-                }
-                for m in msgs
-            ],
+            "messages": [{"id": m.id, "title": m.title, "text": m.text} for m in msgs],
         }
