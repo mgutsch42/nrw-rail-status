@@ -3,9 +3,9 @@
 DOMAIN = "nrw_rail_status"
 DEFAULT_UPDATE_INTERVAL = 300
 
-# Aktualisierte HAFAS-API Endpunkte (VRR / Zuginfo NRW)
+# Offizielle Schnittstellen-URL von zuginfo.nrw für ganz NRW
 MAIN_URL = "https://www.zuginfo.nrw/"
-BASE_URL = "https://auskunft.vrr.de/standard/mgate.exe"
+BASE_URL = "https://www.zuginfo.nrw/vrr/mgate.exe"
 
 HAFAS_VERSION = "1.58"
 HAFAS_LANG = "deu"
@@ -17,7 +17,7 @@ HAFAS_CLIENT_LABEL = "Zuginfo.nrw"
 HAFAS_CLIENT_VERSION = "1111"
 HAFAS_EXT = "DB.R21.12.a"
 
-# Liste aller auswählbaren Linien
+# Liste aller auswählbaren Linien in NRW
 NRW_LINES = [
     "RE 1", "RE 2", "RE 3", "RE 4", "RE 5", "RE 6", "RE 7", "RE 8", "RE 9",
     "RE 10", "RE 11", "RE 13", "RE 14", "RE 16", "RE 17", "RE 18", "RE 19",
