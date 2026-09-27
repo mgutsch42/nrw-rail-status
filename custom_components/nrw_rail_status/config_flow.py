@@ -35,22 +35,18 @@ class NRWRailStatusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         config_entry: config_entries.ConfigEntry,
     ) -> NRWRailStatusOptionsFlowHandler:
         """Get the options flow for this handler."""
-        return NRWRailStatusOptionsFlowHandler(config_entry)
+        return NRWRailStatusOptionsFlowHandler()
 
 
 class NRWRailStatusOptionsFlowHandler(config_entries.OptionsFlow):
     """Handle options flow for NRW Rail Status."""
-
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        """Initialize options flow."""
-        self.config_entry = config_entry
 
     async def async_step_init(self, user_input=None):
         """Manage the options menu in HA."""
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        # Lädt bereits gespeicherte Linien (falls vorhanden)
+        # In modernen HA-Versionen greift man direkt über self.config_entry auf die Entry zu
         selected_lines = self.config_entry.options.get("filtered_lines", [])
 
         schema = vol.Schema(
@@ -58,7 +54,7 @@ class NRWRailStatusOptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Optional("filtered_lines", default=selected_lines): SelectSelector(
                     SelectSelectorConfig(
                         options=NRW_LINES,
-                        multiple=True,  # Erlaubt Mehrfachauswahl
+                        multiple=True,
                         mode=SelectSelectorMode.DROPDOWN,
                     )
                 ),
