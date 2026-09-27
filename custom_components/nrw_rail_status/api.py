@@ -74,7 +74,7 @@ class NRWMessage:
         self.event_refs = raw.get("eventRefL", [])
         self.prod_refs = raw.get("affProdRefL", [])
 
-        # Aufgelöste Daten (Reihenfolge wichtig: edges ZUERST auflösen!)
+        # Aufgelöste Daten
         self.edges = self._resolve_edges()
         self.locations = self._resolve_locations()
         self.products = self._resolve_products()
