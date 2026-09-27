@@ -46,7 +46,7 @@ class NRWRailStatusOptionsFlowHandler(config_entries.OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        # In modernen HA-Versionen greift man direkt über self.config_entry auf die Entry zu
+        # HA liest config_entry automatisch über self.config_entry
         selected_lines = self.config_entry.options.get("filtered_lines", [])
 
         schema = vol.Schema(
