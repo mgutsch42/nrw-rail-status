@@ -1,36 +1,118 @@
-"""Constants for NRW Rail Status integration."""
+"""Constants for NRW Rail Status / Zuginfo.nrw."""
 
-DOMAIN = "nrw_rail_status"
-DEFAULT_UPDATE_INTERVAL = 300
+from typing import Final
 
-# Offizielle Schnittstellen-URL von zuginfo.nrw für ganz NRW
-MAIN_URL = "https://www.zuginfo.nrw/"
-BASE_URL = "https://www.zuginfo.nrw/vrr/mgate.exe"
+DOMAIN: Final = "nrw_rail_status"
 
-HAFAS_VERSION = "1.58"
-HAFAS_LANG = "deu"
-HAFAS_AID = "N93315721115312"
-HAFAS_CLIENT_ID = "DB-PROD"
-HAFAS_CLIENT_TYPE = "WEB"
-HAFAS_CLIENT_NAME = "HAFAS"
-HAFAS_CLIENT_LABEL = "Zuginfo.nrw"
-HAFAS_CLIENT_VERSION = "1111"
-HAFAS_EXT = "DB.R21.12.a"
+# HAFAS Gateway URL von zuginfo.nrw
+BASE_URL: Final = "https://www.zuginfo.nrw/vrr/mgate.exe"
 
-# Liste aller auswählbaren Linien in NRW
-NRW_LINES = [
-    "RE 1", "RE 2", "RE 3", "RE 4", "RE 5", "RE 6", "RE 7", "RE 8", "RE 9",
-    "RE 10", "RE 11", "RE 13", "RE 14", "RE 16", "RE 17", "RE 18", "RE 19",
-    "RE 42", "RE 44", "RE 49", "RE 57",
-    "RB 20", "RB 27", "RB 32", "RB 33", "RB 34", "RB 35", "RB 39", "RB 40",
-    "RB 48", "RB 50", "RB 52", "RB 59", "RB 61", "RB 65", "RB 66", "RB 67",
-    "RB 69", "RB 71", "RB 72", "RB 73", "RB 89", "RB 91",
-    "S 1", "S 2", "S 3", "S 4", "S 5", "S 6", "S 7", "S 8", "S 9",
-    "S 11", "S 12", "S 19", "S 23", "S 28", "S 68",
+# HAFAS Client-Konfiguration
+HAFAS_AID: Final = "hafas-vrr-webapp"
+HAFAS_VERSION: Final = "1.21"
+HAFAS_LANG: Final = "de"
+HAFAS_CLIENT_ID: Final = "VRR"
+HAFAS_CLIENT_TYPE: Final = "WEB"
+HAFAS_CLIENT_NAME: Final = "webapp"
+HAFAS_CLIENT_LABEL: Final = "web"
+HAFAS_CLIENT_VERSION: Final = "1.0.0"
+HAFAS_EXT: Final = "VRR.1"
+
+# Konfigurations-Schlüssel
+CONF_LINES: Final = "lines"
+CONF_REFRESH_INTERVAL: Final = "refresh_interval"
+
+# Standardwerte
+DEFAULT_REFRESH_INTERVAL: Final = 15  # Minuten
+
+# Auswählbare NRW-Linien für die Integration
+AVAILABLE_LINES: Final = [
+    # Regional-Express (RE)
+    "RE1",
+    "RE2",
+    "RE3",
+    "RE4",
+    "RE5",
+    "RE6",
+    "RE7",
+    "RE8",
+    "RE9",
+    "RE10",
+    "RE11",
+    "RE12",
+    "RE13",
+    "RE14",
+    "RE15",
+    "RE16",
+    "RE17",
+    "RE18",
+    "RE19",
+    "RE22",
+    "RE42",
+    "RE44",
+    "RE49",
+    "RE57",
+    # Regionalbahn (RB)
+    "RB20",
+    "RB21",
+    "RB24",
+    "RB25",
+    "RB27",
+    "RB30",
+    "RB31",
+    "RB32",
+    "RB33",
+    "RB34",
+    "RB35",
+    "RB36",
+    "RB37",
+    "RB38",
+    "RB39",
+    "RB40",
+    "RB43",
+    "RB46",
+    "RB48",
+    "RB50",
+    "RB51",
+    "RB52",
+    "RB53",
+    "RB54",
+    "RB59",
+    "RB61",
+    "RB63",
+    "RB64",
+    "RB65",
+    "RB66",
+    "RB67",
+    "RB68",
+    "RB69",
+    "RB71",
+    "RB72",
+    "RB73",
+    "RB74",
+    "RB75",
+    "RB77",
+    "RB84",
+    "RB85",
+    "RB89",
+    "RB91",
+    "RB92",
+    "RB93",
+    "RB95",
+    # S-Bahnen
+    "S1",
+    "S2",
+    "S3",
+    "S4",
+    "S5",
+    "S6",
+    "S7",
+    "S8",
+    "S9",
+    "S11",
+    "S12",
+    "S19",
+    "S28",
+    "S68",
 ]
-
-# Ausblendbare Kategorien im Optionen-Menü
-CATEGORY_EXCLUDE_OPTIONS = {
-    "elevator": "Aufzugsstörungen (Aufzug außer Betrieb)",
-    "construction": "Allgemeine Bauarbeiten / Vorankündigungen",
 }
