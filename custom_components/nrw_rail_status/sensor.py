@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import logging
-from homeassistant.components.sensor import SensorEntity, SensorStateClass
+from typing import Any
+
+from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .coordinator import NRWRailStatusDataUpdateCoordinator
+from .const import DOMAIN, CONF_LINES
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -19,91 +22,103 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the NRW Rail Status sensor from a config entry."""
-    coordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([NRWRailStatusSensor(coordinator, entry)], True)
+    """Set up NRW Rail Status sensors based on config entry."""
+    coordinator: NRWRailStatusDataUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
+
+    selected_lines = entry.options.get(CONF_LINES) or entry.data.get(CONF_LINES) or []
+
+    entities = []
+    if selected_lines:
+        for line in selected_lines:
+            entities.append(NRWRailStatusLineSensor(coordinator, line))
+    else:
+        entities.append(NRWRailStatusOverviewSensor(coordinator))
+
+    async_add_entities(entities)
 
 
-class NRWRailStatusSensor(CoordinatorEntity, SensorEntity):
-    """Sensor that exposes the number of active disruptions."""
+class NRWRailStatusOverviewSensor(CoordinatorEntity[NRWRailStatusDataUpdateCoordinator], SensorEntity):
+    """Sensor showing overall messages count."""
 
-    _attr_name = "NRW Rail Status"
+    _attr_has_entity_name = True
     _attr_icon = "mdi:train"
-    _attr_state_class = SensorStateClass.MEASUREMENT
 
-    # Beseitigt den Recorder-Fehler: Schließt das große "messages"-Attribut 
-    # von der Datenbank-Speicherung aus, lässt es aber im RAM/Dashboard nutzbar.
-    _unrecorded_attributes = frozenset({"messages"})
-
-    def __init__(self, coordinator, entry: ConfigEntry) -> None:
-        """Initialize the sensor."""
+    def __init__(self, coordinator: NRWRailStatusDataUpdateCoordinator) -> None:
+        """Initialize overview sensor."""
         super().__init__(coordinator)
-        self._attr_unique_id = f"{entry.entry_id}_status"
+        self._attr_unique_id = f"{DOMAIN}_overview"
+        self._attr_name = "NRW Rail Status Gesamt"
 
     @property
     def native_value(self) -> int:
-        """Return number of active disruptions."""
-        data = self.coordinator.data
-
-        if not data:
-            _LOGGER.debug("Sensor state: no data available, returning 0")
+        """Return total active messages count."""
+        if not self.coordinator.data:
             return 0
-
-        active_count = sum(1 for m in data if getattr(m, "active", False))
-        _LOGGER.debug("Sensor state: %s active disruptions", active_count)
-        return active_count
+        return len(self.coordinator.data)
 
     @property
-    def extra_state_attributes(self) -> dict:
-        """Return detailed attributes for the disruptions list."""
-        data = self.coordinator.data
-
-        if not data:
-            _LOGGER.debug("Sensor attributes: no data available")
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return details for all messages."""
+        if not self.coordinator.data:
             return {"messages": []}
 
-        # Baut die Nachrichtenliste auf
-        messages_list = [
-            {
-                "id": getattr(m, "id", None),
-                "title": getattr(m, "title", ""),
-                "text": getattr(m, "text", ""),
-                "start": f"{getattr(m, 'start_date', '')} {getattr(m, 'start_time', '')}".strip(),
-                "end": f"{getattr(m, 'end_date', '')} {getattr(m, 'end_time', '')}".strip(),
-                "priority": getattr(m, "priority", None),
-                "comp": getattr(m, "comp", None),
-                "product": getattr(m, "product", None),
-                "active": getattr(m, "active", False),
-                "locations": getattr(m, "locations", []),
-                "products": getattr(m, "products", []),
-                "edges": getattr(m, "edges", []),
-                "events": getattr(m, "events", []),
-            }
-            for m in data
-        ]
-
-        attributes = {"messages": messages_list}
-
-        # Falls der erste Eintrag separat benötigt wird, greife auf die gefüllte Liste zurück,
-        # statt die Objekte erneut mit getattr() abzufragen.
-        if messages_list:
-            first = messages_list[0]
-            attributes.update(
+        messages_data = []
+        for msg in self.coordinator.data:
+            messages_data.append(
                 {
-                    "first_id": first["id"],
-                    "first_title": first["title"],
-                    "first_text": first["text"],
-                    "first_start": first["start"],
-                    "first_end": first["end"],
-                    "first_priority": first["priority"],
-                    "first_comp": first["comp"],
-                    "first_product": first["product"],
-                    "first_active": first["active"],
-                    "first_locations": first["locations"],
-                    "first_products": first["products"],
-                    "first_edges": first["edges"],
-                    "first_events": first["events"],
+                    "id": msg.id,
+                    "title": msg.title,
+                    "text": msg.text,
+                    "products": [p.get("name") for p in msg.products if p.get("name")],
                 }
             )
+        return {"messages": messages_data}
 
-        return attributes
+
+class NRWRailStatusLineSensor(CoordinatorEntity[NRWRailStatusDataUpdateCoordinator], SensorEntity):
+    """Sensor for a specific train/bus line."""
+
+    _attr_has_entity_name = True
+    _attr_icon = "mdi:train"
+
+    def __init__(self, coordinator: NRWRailStatusDataUpdateCoordinator, line: str) -> None:
+        """Initialize line sensor."""
+        super().__init__(coordinator)
+        self.line = line
+        self._attr_unique_id = f"{DOMAIN}_line_{line.lower()}"
+        self._attr_name = f"NRW Rail Status {line}"
+
+    @property
+    def native_value(self) -> int:
+        """Return number of disruptions for this line."""
+        return len(self._get_line_messages())
+
+    def _get_line_messages(self) -> list:
+        if not self.coordinator.data:
+            return []
+
+        line_msgs = []
+        for msg in self.coordinator.data:
+            for prod in msg.products:
+                prod_name = (prod.get("name") or "").upper().replace(" ", "")
+                line_name = self.line.upper().replace(" ", "")
+                if line_name in prod_name or prod_name in line_name:
+                    line_msgs.append(msg)
+                    break
+        return line_msgs
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return details for line-specific messages."""
+        msgs = self._get_line_messages()
+        return {
+            "disruption_count": len(msgs),
+            "messages": [
+                {
+                    "id": m.id,
+                    "title": m.title,
+                    "text": m.text,
+                }
+                for m in msgs
+            ],
+        }
