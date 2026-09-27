@@ -2,20 +2,16 @@
 
 from __future__ import annotations
 
-import logging
-from typing import Any
-
 import voluptuous as vol
-
 from homeassistant import config_entries
 from homeassistant.core import callback
-from homeassistant.data_entry_flow import FlowResult
+from homeassistant.helpers.selector import (
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
+)
 
-from .const import DOMAIN
-
-_LOGGER = logging.getLogger(__name__)
-
-DEFAULT_SCAN_INTERVAL = 60
+from .const import DOMAIN, NRW_LINES
 
 
 class NRWRailStatusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -23,58 +19,50 @@ class NRWRailStatusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
-    async def async_step_user(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Handle the initial step."""
+    async def async_step_user(self, user_input=None):
+        """Handle the initial step when adding the integration."""
+        if self._async_current_entries():
+            return self.async_abort(reason="single_instance_allowed")
+
         if user_input is not None:
-            await self.async_set_unique_id("nrw_rail_status")
-            self._abort_if_unique_id_configured()
-            return self.async_create_entry(
-                title="NRW Rail Status",
-                data=user_input,
-            )
+            return self.async_create_entry(title="NRW Rail Status", data={})
 
-        data_schema = vol.Schema(
-            {
-                vol.Optional("scan_interval", default=DEFAULT_SCAN_INTERVAL): int,
-            }
-        )
-
-        return self.async_show_form(
-            step_id="user",
-            data_schema=data_schema,
-        )
+        return self.async_show_form(step_id="user")
 
     @staticmethod
     @callback
     def async_get_options_flow(
         config_entry: config_entries.ConfigEntry,
-    ) -> config_entries.OptionsFlow:
+    ) -> NRWRailStatusOptionsFlowHandler:
         """Get the options flow for this handler."""
-        return NRWRailStatusOptionsFlowHandler()
+        return NRWRailStatusOptionsFlowHandler(config_entry)
 
 
 class NRWRailStatusOptionsFlowHandler(config_entries.OptionsFlow):
-    """Handle options for NRW Rail Status."""
+    """Handle options flow for NRW Rail Status."""
 
-    async def async_step_init(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Manage the options."""
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        """Initialize options flow."""
+        self.config_entry = config_entry
+
+    async def async_step_init(self, user_input=None):
+        """Manage the options menu in HA."""
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        current_interval = self.config_entry.options.get(
-            "scan_interval",
-            self.config_entry.data.get("scan_interval", DEFAULT_SCAN_INTERVAL),
+        # Lädt bereits gespeicherte Linien (falls vorhanden)
+        selected_lines = self.config_entry.options.get("filtered_lines", [])
+
+        schema = vol.Schema(
+            {
+                vol.Optional("filtered_lines", default=selected_lines): SelectSelector(
+                    SelectSelectorConfig(
+                        options=NRW_LINES,
+                        multiple=True,  # Erlaubt Mehrfachauswahl
+                        mode=SelectSelectorMode.DROPDOWN,
+                    )
+                ),
+            }
         )
 
-        return self.async_show_form(
-            step_id="init",
-            data_schema=vol.Schema(
-                {
-                    vol.Optional("scan_interval", default=current_interval): int,
-                }
-            ),
-        )
+        return self.async_show_form(step_id="init", data_schema=schema)
