@@ -22,7 +22,7 @@ from .const import (
     HAFAS_EXT,
     HAFAS_LANG,
     HAFAS_VERSION,
-    PRE_URL,
+    MAIN_URL,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -58,7 +58,7 @@ class NRWMessage:
         self.text = _html_to_markdown(self.text_html)
 
         # Status / Metadaten
-        self.active = raw.get("act", False)
+        self.active = raw.get("act", True)
         self.priority = raw.get("prio")
         self.product = raw.get("prod")
         self.comp = raw.get("comp")
@@ -158,22 +158,22 @@ class NRWHimApi:
         self.session = session
 
     async def _prepare_session(self) -> None:
-        """Lädt die Web-App wie ein Browser, um Session-Cookies zu erhalten."""
+        """Lädt die Hauptseite, um Session-Cookies zu erhalten."""
         headers = {
             "User-Agent": (
-                "Mozilla/5.0 (Linux; Android 15; Pixel 9) "
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/149.0.0.0 Mobile Safari/537.36"
+                "Chrome/122.0.0.0 Safari/537.36"
             ),
-            "Accept": "application/json",
-            "Accept-Language": "de,de-DE;q=0.9,en;q=0.8",
-            "Content-Type": "application/json",
-            "Origin": "https://www.zuginfo.nrw",
-            "Referer": "https://www.zuginfo.nrw/webapp",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "de-DE,de;q=0.9",
         }
 
-        async with self.session.get(PRE_URL, headers=headers) as resp:
-            _LOGGER.debug("PRE_URL status: %s", resp.status)
+        try:
+            async with self.session.get(MAIN_URL, headers=headers) as resp:
+                _LOGGER.debug("Hauptseite Status: %s", resp.status)
+        except Exception as err:
+            _LOGGER.warning("Fehler beim Vorbereiten der Session über Hauptseite: %s", err)
 
     async def fetch_messages(self) -> list[NRWMessage]:
         """Holt HIM-Meldungen von Zuginfo.nrw."""
@@ -181,10 +181,9 @@ class NRWHimApi:
 
         request_id = _random_request_id()
 
-        # Dynamische Datumsberechnung: Gestern bis in 1 Jahr
         now = datetime.now()
-        date_begin = (now - timedelta(days=1)).strftime("%Y%m%d")
-        date_end = (now + timedelta(days=365)).strftime("%Y%m%d")
+        date_begin = (now - timedelta(days=2)).strftime("%Y%m%d")
+        date_end = (now + timedelta(days=180)).strftime("%Y%m%d")
 
         payload = {
             "id": request_id,
@@ -212,14 +211,6 @@ class NRWHimApi:
                         "timeB": "000000",
                         "dateE": date_end,
                         "timeE": "235959",
-                        "himFltrL": [
-                            {"type": "CH", "mode": "INC", "value": "MESSAGELIST_CUSTOMER"},
-                            {"type": "HIMCAT", "mode": "INC", "value": 0},
-                            {"type": "HIMCAT", "mode": "INC", "value": 4},
-                            {"type": "HIMCAT", "mode": "INC", "value": 2},
-                            {"type": "HIMCAT", "mode": "INC", "value": 3},
-                        ],
-                        "sortL": ["LMOD_DESC"],
                         "getParent": True,
                         "getChildren": True,
                     },
@@ -240,53 +231,57 @@ class NRWHimApi:
             f"&rnd={rnd}"
         )
 
-        async with self.session.post(
-            url,
-            json=payload,
-            headers={
-                "User-Agent": (
-                    "Mozilla/5.0 (Linux; Android 15; Pixel 9) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/149.0.0.0 Mobile Safari/537.36"
-                ),
-                "Accept": "application/json",
-                "Accept-Language": "de-DE,de;q=0.9,en;q=0.8",
-                "Content-Type": "application/json",
-                "Origin": "https://www.zuginfo.nrw",
-                "Referer": "https://www.zuginfo.nrw/webapp/",
-            },
-        ) as resp:
-            if resp.status != 200:
-                _LOGGER.error("API returned HTTP Status %s", resp.status)
-                return []
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/122.0.0.0 Safari/537.36"
+            ),
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "de-DE,de;q=0.9",
+            "Content-Type": "application/json",
+            "Origin": "https://www.zuginfo.nrw",
+            "Referer": "https://www.zuginfo.nrw/",
+        }
 
-            if "html" in resp.headers.get("Content-Type", "").lower():
-                _LOGGER.error("Server lieferte HTML statt JSON.")
+        _LOGGER.debug("Sende POST-Request an %s", url)
+
+        async with self.session.post(url, json=payload, headers=headers) as resp:
+            _LOGGER.debug("API Response HTTP Status: %s", resp.status)
+
+            if resp.status != 200:
+                _LOGGER.error("Zuginfo API lieferte HTTP Status %s", resp.status)
                 return []
 
             try:
                 data = await resp.json(content_type=None)
             except Exception as e:
-                _LOGGER.error("Konnte JSON nicht parsen: %s", e)
+                raw_body = await resp.text()
+                _LOGGER.error("Konnte JSON nicht parsen: %s. Body: %s", e, raw_body[:200])
                 return []
+
+            _LOGGER.debug("API Antwort erhalten: %s", str(data)[:300])
 
             try:
                 svc = data["svcResL"][0]["res"]
-            except Exception as e:
-                _LOGGER.error("Unerwartete JSON-Struktur: %s", e)
+            except (KeyError, IndexError, TypeError) as e:
+                _LOGGER.error("Unerwartete JSON-Struktur der API: %s | Inhalt: %s", e, data)
                 return []
 
             common = svc.get("common", {})
             msgL = svc.get("himL", [])
+
             if not isinstance(msgL, list):
-                _LOGGER.error("Erwarte Liste in 'himL'")
+                _LOGGER.warning("'himL' ist keine Liste oder leer.")
                 return []
+
+            _LOGGER.info("Erfolgreich %s HIM-Meldungen von Zuginfo.nrw geladen.", len(msgL))
 
             messages = []
             for msg in msgL:
                 try:
                     messages.append(NRWMessage(msg, common))
                 except Exception as e:
-                    _LOGGER.error("Fehler beim Erstellen einer NRWMessage: %s", e)
+                    _LOGGER.error("Fehler beim Erstellen der NRWMessage: %s", e)
 
             return messages
