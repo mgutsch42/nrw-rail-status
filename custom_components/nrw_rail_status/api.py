@@ -150,14 +150,14 @@ class NRWMessage:
 
 
 class NRWHimApi:
-    """Client für die HAFAS-HIM-API von Zuginfo.nrw / VRR."""
+    """Client für die HAFAS-HIM-API von Zuginfo.nrw."""
 
     def __init__(self, session: aiohttp.ClientSession) -> None:
         """Initialize the API client."""
         self.session = session
 
     async def fetch_messages(self) -> list[NRWMessage]:
-        """Holt HIM-Meldungen vom VRR/Zuginfo-Server."""
+        """Holt HIM-Meldungen von Zuginfo.nrw."""
         request_id = _random_request_id()
 
         now = datetime.now()
@@ -207,8 +207,8 @@ class NRWHimApi:
             "Accept": "application/json, text/plain, */*",
             "Accept-Language": "de-DE,de;q=0.9",
             "Content-Type": "application/json",
-            "Origin": "https://auskunft.vrr.de",
-            "Referer": "https://auskunft.vrr.de/",
+            "Origin": "https://www.zuginfo.nrw",
+            "Referer": "https://www.zuginfo.nrw/",
         }
 
         _LOGGER.debug("Sende POST-Request an %s", BASE_URL)
@@ -242,7 +242,7 @@ class NRWHimApi:
                 _LOGGER.warning("'msgL' ist keine Liste oder leer.")
                 return []
 
-            _LOGGER.info("Erfolgreich %s HIM-Meldungen geladen.", len(msgL))
+            _LOGGER.info("Erfolgreich %s HIM-Meldungen von Zuginfo.nrw geladen.", len(msgL))
 
             messages = []
             for msg in msgL:
