@@ -20,6 +20,22 @@ from .const import DEFAULT_UPDATE_INTERVAL, DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 
+def classify_message(title: str, text: str) -> str:
+    """Classify HIM message based on title and content keywords."""
+    combined = f"{title} {text}".lower()
+
+    if any(k in combined for k in ["aufzug", "aufzüge", "fahrstuhl", "gleis 11/12 in hagen"]):
+        return "elevator"
+
+    if any(k in combined for k in ["ausfall", "teilausfall", "entfällt", "entfallen", "zugausfall"]):
+        return "cancellation"
+
+    if any(k in combined for k in ["bauarbeiten", "oberleitung", "gleis", "brücke", "weichen"]):
+        return "construction"
+
+    return "general"
+
+
 class NRWRailStatusCoordinator(DataUpdateCoordinator):
     """Coordinator to fetch HIM messages from Zuginfo.nrw."""
 
@@ -37,7 +53,7 @@ class NRWRailStatusCoordinator(DataUpdateCoordinator):
         self.api = NRWHimApi(session)
 
     async def _async_update_data(self):
-        """Fetch data from the API with exact line filtering and deduplication."""
+        """Fetch data from the API with exact line filtering, category filtering, and deduplication."""
 
         _LOGGER.debug("Coordinator update triggered")
 
@@ -51,44 +67,50 @@ class NRWRailStatusCoordinator(DataUpdateCoordinator):
             _LOGGER.debug("Coordinator received %s raw HIM messages", len(messages))
 
             filtered_lines = self.entry.options.get("filtered_lines", [])
+            excluded_categories = self.entry.options.get("excluded_categories", [])
 
-            # -------------------------------------------------------------
-            # 1. Exakte Linien-Filterung anwenden
-            # -------------------------------------------------------------
+            # 1. Linien- & Kategorie-Filterung
             candidate_messages = []
-            if not filtered_lines:
-                candidate_messages = messages
-            else:
-                for msg in messages:
-                    # Extrahiere alle Produktnamen (z. B. "RE 4", "S 8")
-                    raw_products = getattr(msg, "products", []) or []
-                    product_names = [
-                        p.get("name", "") if isinstance(p, dict) else getattr(p, "name", str(p))
-                        for p in raw_products
-                    ]
 
-                    msg_title = getattr(msg, "title", "") or ""
-                    msg_text = getattr(msg, "text", "") or ""
+            for msg in messages:
+                msg_title = getattr(msg, "title", "") or ""
+                msg_text = getattr(msg, "text", "") or ""
 
-                    match = False
+                category = classify_message(msg_title, msg_text)
+
+                # Kategorie-Ausschluss (z. B. Aufzüge herausfiltern)
+                if category in excluded_categories:
+                    continue
+
+                raw_products = getattr(msg, "products", []) or []
+                product_names = [
+                    p.get("name", "") if isinstance(p, dict) else getattr(p, "name", str(p))
+                    for p in raw_products
+                ]
+
+                match = False
+                if not filtered_lines:
+                    match = True
+                else:
                     for line in filtered_lines:
-                        # Exakter Abgleich im Produkte-Array
                         if line in product_names:
                             match = True
                             break
 
-                        # Wortgrenzen-Regex für Titel & Text (verhindert z.B. "RE 4" Matching bei "RE 44")
                         pattern = r"\b" + re.escape(line).replace(r"\ ", r"\s*") + r"\b"
                         if re.search(pattern, msg_title, re.IGNORECASE) or re.search(pattern, msg_text, re.IGNORECASE):
                             match = True
                             break
 
-                    if match:
-                        candidate_messages.append(msg)
+                if match:
+                    if isinstance(msg, dict):
+                        msg["category"] = category
+                    else:
+                        setattr(msg, "category", category)
 
-            # -------------------------------------------------------------
+                    candidate_messages.append(msg)
+
             # 2. Deduplizierung: Identische Titel + Texte herausfiltern
-            # -------------------------------------------------------------
             unique_messages = []
             seen_signatures = set()
 
@@ -96,7 +118,6 @@ class NRWRailStatusCoordinator(DataUpdateCoordinator):
                 title = (getattr(msg, "title", "") or "").strip()
                 text = (getattr(msg, "text", "") or "").strip()
 
-                # Kombination aus Titel und Text als eindeutiger Schlüssel
                 signature = (title, text)
 
                 if signature not in seen_signatures:
@@ -104,10 +125,9 @@ class NRWRailStatusCoordinator(DataUpdateCoordinator):
                     unique_messages.append(msg)
 
             _LOGGER.debug(
-                "Filtered %s raw messages down to %s unique messages for selected lines: %s",
+                "Filtered %s raw messages down to %s unique messages",
                 len(messages),
                 len(unique_messages),
-                filtered_lines,
             )
 
             return unique_messages
@@ -118,14 +138,4 @@ class NRWRailStatusCoordinator(DataUpdateCoordinator):
         except Exception as err:
             err_str = str(err)
             _LOGGER.error("Unexpected error in coordinator: %s", err_str)
-
-            if "hammError" in err_str:
-                raise UpdateFailed("HAFAS returned hammError (invalid session or payload).")
-
-            if "svcResL" in err_str and "[]" in err_str:
-                raise UpdateFailed("HAFAS returned empty svcResL (invalid request).")
-
-            if "HCI" in err_str:
-                raise UpdateFailed(f"HAFAS internal error: {err_str}")
-
             raise UpdateFailed(f"Unexpected error fetching NRW HIM data: {err_str}") from err
