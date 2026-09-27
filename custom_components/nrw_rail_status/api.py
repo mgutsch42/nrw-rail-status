@@ -1,24 +1,24 @@
+"""API client for NRW Rail Status / Zuginfo.nrw."""
+
 from __future__ import annotations
 
-import aiohttp
 import logging
 import random
-import string
 import re
+import string
+from datetime import datetime, timedelta
 from html import unescape
+
+import aiohttp
 
 BASE_URL = "https://www.zuginfo.nrw/gate/"
 PRE_URL = "https://www.zuginfo.nrw/webapp/"
 
 _LOGGER = logging.getLogger(__name__)
-# ---------------------------------------------------------
-# Hilfsfunktionen
-# ---------------------------------------------------------
 
-def _random_request_id(length=8):
+
+def _random_request_id(length=8) -> str:
     """Erzeugt eine zufällige Request-ID wie ein Browser."""
-    import random
-    import string
     return "".join(random.choices(string.ascii_letters + string.digits, k=length))
 
 
@@ -26,21 +26,17 @@ def _html_to_markdown(html: str) -> str:
     """Konvertiert HTML aus HIM-Meldungen in reinen Text."""
     if not html:
         return ""
-    from html import unescape
-    import re
-
     text = unescape(html)
     text = re.sub(r"<br\s*/?>", "\n", text)
     text = re.sub(r"<[^>]+>", "", text)
     return text.strip()
-# ---------------------------------------------------------
-# Datenmodell: NRWMessage
-# ---------------------------------------------------------
+
 
 class NRWMessage:
     """Repräsentiert eine einzelne HIM-Meldung aus Zuginfo.nrw."""
 
-    def __init__(self, raw, common):
+    def __init__(self, raw: dict, common: dict) -> None:
+        """Initialize the message object."""
         self.raw = raw
         self.common = common
 
@@ -74,11 +70,7 @@ class NRWMessage:
         self.edges = self._resolve_edges()
         self.events = self._resolve_events()
 
-    # -----------------------------------------------------
-    # Auflösung von Referenzen
-    # -----------------------------------------------------
-
-    def _resolve_locations(self):
+    def _resolve_locations(self) -> list[dict]:
         locL = self.common.get("locL", [])
         result = []
 
@@ -86,80 +78,85 @@ class NRWMessage:
             for loc_idx in [edge.get("from"), edge.get("to")]:
                 if loc_idx is not None and 0 <= loc_idx < len(locL):
                     loc = locL[loc_idx]
-                    result.append({
-                        "name": loc.get("name"),
-                        "id": loc.get("extId"),
-                        "type": loc.get("type"),
-                        "lat": loc.get("crd", {}).get("y"),
-                        "lon": loc.get("crd", {}).get("x"),
-                    })
-
+                    result.append(
+                        {
+                            "name": loc.get("name"),
+                            "id": loc.get("extId"),
+                            "type": loc.get("type"),
+                            "lat": loc.get("crd", {}).get("y"),
+                            "lon": loc.get("crd", {}).get("x"),
+                        }
+                    )
         return result
 
-    def _resolve_products(self):
+    def _resolve_products(self) -> list[dict]:
         prodL = self.common.get("prodL", [])
         result = []
 
         for idx in self.prod_refs:
             if 0 <= idx < len(prodL):
                 prod = prodL[idx]
-                result.append({
-                    "name": prod.get("name"),
-                    "line": prod.get("line"),
-                    "number": prod.get("number"),
-                    "operator": prod.get("oprX"),
-                })
-
+                result.append(
+                    {
+                        "name": prod.get("name"),
+                        "line": prod.get("line"),
+                        "number": prod.get("number"),
+                        "operator": prod.get("oprX"),
+                    }
+                )
         return result
 
-    def _resolve_edges(self):
+    def _resolve_edges(self) -> list[dict]:
         edges = self.common.get("himMsgEdgeL", [])
         result = []
 
         for idx in self.edge_refs:
             if 0 <= idx < len(edges):
                 edge = edges[idx]
-                result.append({
-                    "from": edge.get("fLocX"),
-                    "to": edge.get("tLocX"),
-                    "dir": edge.get("dir"),
-                })
-
+                result.append(
+                    {
+                        "from": edge.get("fLocX"),
+                        "to": edge.get("tLocX"),
+                        "dir": edge.get("dir"),
+                    }
+                )
         return result
 
-    def _resolve_events(self):
+    def _resolve_events(self) -> list[dict]:
         events = self.common.get("himMsgEventL", [])
         result = []
 
         for idx in self.event_refs:
             if 0 <= idx < len(events):
                 ev = events[idx]
-                result.append({
-                    "type": ev.get("type"),
-                    "text": ev.get("txt"),
-                    "time": ev.get("t"),
-                })
-
+                result.append(
+                    {
+                        "type": ev.get("type"),
+                        "text": ev.get("txt"),
+                        "time": ev.get("t"),
+                    }
+                )
         return result
-# ---------------------------------------------------------
-# API-Client: NRWHimApi (Teil 1)
-# ---------------------------------------------------------
+
 
 class NRWHimApi:
     """Client für die HAFAS-HIM-API von Zuginfo.nrw."""
 
-    def __init__(self, session: aiohttp.ClientSession):
+    def __init__(self, session: aiohttp.ClientSession) -> None:
+        """Initialize the API client."""
         self.session = session
 
-    async def _prepare_session(self):
+    async def _prepare_session(self) -> None:
         """Lädt die Web-App wie ein Browser, um Session-Cookies zu erhalten."""
-
         headers = {
-            "User-Agent": "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Mobile Safari/537.36",
+            "User-Agent": (
+                "Mozilla/5.0 (Linux; Android 15; Pixel 9) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/149.0.0.0 Mobile Safari/537.36"
+            ),
             "Accept": "application/json",
             "Accept-Language": "de,de-DE;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6",
             "Content-Type": "application/json",
-            
             "Origin": "https://www.zuginfo.nrw",
             "Referer": "https://www.zuginfo.nrw/webapp",
         }
@@ -167,15 +164,16 @@ class NRWHimApi:
         async with self.session.get(PRE_URL, headers=headers) as resp:
             _LOGGER.debug("PRE_URL status: %s", resp.status)
 
-
-    async def fetch_messages(self):
+    async def fetch_messages(self) -> list[NRWMessage]:
         """Holt HIM-Meldungen von Zuginfo.nrw."""
-
-        # Schritt 1: PRE-Request (Cookies holen)
         await self._prepare_session()
 
-        # Schritt 2: Request-Payload wie im Browser
         request_id = _random_request_id()
+
+        # Dynamische Datumsberechnung (Gestern bis in 1 Jahr)
+        now = datetime.now()
+        date_begin = (now - timedelta(days=1)).strftime("%Y%m%d")
+        date_end = (now + timedelta(days=365)).strftime("%Y%m%d")
 
         payload = {
             "id": request_id,
@@ -199,9 +197,9 @@ class NRWHimApi:
                     "meth": "HimSearch",
                     "req": {
                         "maxNum": 500,
-                        "dateB": "20251214",
+                        "dateB": date_begin,
                         "timeB": "000000",
-                        "dateE": "20261212",
+                        "dateE": date_end,
                         "timeE": "235959",
                         "himFltrL": [
                             {"type": "CH", "mode": "INC", "value": "MESSAGELIST_CUSTOMER"},
@@ -219,14 +217,7 @@ class NRWHimApi:
             ],
         }
 
-
-        # Cookie-Debug
-        _LOGGER.error("Cookies after PRE_URL: %s",
-                      self.session.cookie_jar.filter_cookies(PRE_URL))
-
-        # Schritt 3: POST-Request an die HIM-API
         rnd = random.randint(10**12, 10**13 - 1)
-
         url = (
             f"{BASE_URL}"
             f"?requestId={request_id}"
@@ -239,7 +230,7 @@ class NRWHimApi:
         )
 
         async with self.session.post(
-            url,   # <--- NEU: die URL aus Schritt 4
+            url,
             json=payload,
             headers={
                 "User-Agent": (
@@ -254,51 +245,39 @@ class NRWHimApi:
                 "Referer": "https://www.zuginfo.nrw/webapp/",
             },
         ) as resp:
+            if resp.status != 200:
+                _LOGGER.error("API returned HTTP Status %s", resp.status)
+                return []
+
             raw_text = await resp.text()
 
+            if "html" in resp.headers.get("Content-Type", "").lower():
+                _LOGGER.error("Server lieferte HTML statt JSON.")
+                return []
 
-
-        # Schritt 3b: Cookie-Debug nach POST
-        _LOGGER.debug("RAW POST RESPONSE: %s", raw_text)
-        _LOGGER.error("Cookies after POST: %s",
-                      self.session.cookie_jar.filter_cookies(PRE_URL))
-
-
-        # Wenn der Server HTML statt JSON liefert → Hinweis ausgeben
-        if "html" in resp.headers.get("Content-Type", "").lower():
-            _LOGGER.error("Server lieferte HTML statt JSON. Vermutlich fehlende Session.")
-            _LOGGER.error("Erste 500 Zeichen HTML: %s", raw_text[:500])
-            return []
- 
-        # Schritt 4: JSON-Antwort parsen
-        try:
-            data = await resp.json(content_type=None)
-        except Exception as e:
-            _LOGGER.error("Konnte JSON nicht parsen: %s", e)
-            _LOGGER.error("Antwort war: %s", raw_text)
-            return []
-
-        # Schritt 5: Struktur prüfen
-        try:
-            svc = data["svcResL"][0]["res"]
-        except Exception as e:
-            _LOGGER.error("Unerwartete JSON-Struktur: %s", e)
-            _LOGGER.error("Antwort war: %s", raw_text)
-            return []
-
-        common = svc.get("common", {})
-        msgL = svc.get("himL", [])
-        if not isinstance(msgL, list):
-            _LOGGER.error("Erwarte Liste in 'himL', erhalten: %s", type(msgL))
-            _LOGGER.error("Antwort war: %s", raw_text)
-            return []
-
-        # Schritt 6: NRWMessage-Objekte erzeugen
-        messages = []
-        for msg in msgL:
             try:
-                messages.append(NRWMessage(msg, common))
+                data = await resp.json(content_type=None)
             except Exception as e:
-                _LOGGER.error("Fehler beim Erstellen einer NRWMessage: %s", e)
+                _LOGGER.error("Konnte JSON nicht parsen: %s", e)
+                return []
 
-        return messages
+            try:
+                svc = data["svcResL"][0]["res"]
+            except Exception as e:
+                _LOGGER.error("Unerwartete JSON-Struktur: %s", e)
+                return []
+
+            common = svc.get("common", {})
+            msgL = svc.get("himL", [])
+            if not isinstance(msgL, list):
+                _LOGGER.error("Erwarte Liste in 'himL'")
+                return []
+
+            messages = []
+            for msg in msgL:
+                try:
+                    messages.append(NRWMessage(msg, common))
+                except Exception as e:
+                    _LOGGER.error("Fehler beim Erstellen einer NRWMessage: %s", e)
+
+            return messages
