@@ -158,6 +158,7 @@ class NRWHimApi:
     async def fetch_messages(self) -> list[NRWMessage]:
         """Holt HIM-Meldungen von Zuginfo.nrw."""
         request_id = _random_request_id()
+        rnd = random.randint(10**12, 10**13 - 1)
 
         heute = datetime.now().strftime("%Y%m%d")
 
@@ -195,6 +196,21 @@ class NRWHimApi:
             ],
         }
 
+        # Die Zuginfo.nrw-Schnittstelle erwartet die Angaben AUCH in der
+        # Adresse (so macht es die Webseite selbst). Ohne diesen Anhang
+        # antwortet der Server mit 404.
+        base = BASE_URL if BASE_URL.endswith("/") else f"{BASE_URL}/"
+        url = (
+            f"{base}"
+            f"?requestId={request_id}"
+            f"&hciMethod=HimSearch"
+            f"&hciVersion={HAFAS_VERSION}"
+            f"&hciClientType={HAFAS_CLIENT_TYPE}"
+            f"&hciClientVersion={HAFAS_CLIENT_VERSION}"
+            f"&aid={HAFAS_AID}"
+            f"&rnd={rnd}"
+        )
+
         headers = {
             "User-Agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -204,43 +220,44 @@ class NRWHimApi:
             "Accept": "application/json, text/plain, */*",
             "Accept-Language": "de-DE,de;q=0.9",
             "Content-Type": "application/json",
-            "Origin": "[vrr.hafas.cloud](https://vrr.hafas.cloud)",
-            "Referer": "[vrr.hafas.cloud](https://vrr.hafas.cloud/)",
+            "Origin": "https://vrr.hafas.cloud",
+            "Referer": "https://vrr.hafas.cloud/",
         }
 
-        _LOGGER.debug("Sende HimSearch-Anfrage an %s", BASE_URL)
+        _LOGGER.debug("Sende HimSearch-Anfrage an %s", base)
 
         try:
             async with self.session.post(
-                BASE_URL, json=payload, headers=headers
+                url, json=payload, headers=headers
             ) as resp:
                 if resp.status != 200:
                     body = await resp.text()
                     raise NRWHimApiError(
-                        f"HAFAS antwortete mit Status {resp.status}: {body[:300]}"
+                        f"Zuginfo.nrw antwortete mit Status {resp.status}: "
+                        f"{body[:300]}"
                     )
                 data = await resp.json(content_type=None)
         except aiohttp.ClientError as err:
             raise NRWHimApiError(f"Verbindungsfehler: {err}") from err
 
-        # Fehler, die die Bahn IM Datenpaket meldet (nicht als HTTP-Status).
+        # Fehler, die der Server IM Datenpaket meldet (nicht als HTTP-Status).
         entry = (data.get("svcResL") or [{}])[0]
         err_code = entry.get("err")
         if err_code and err_code != "OK":
             raise NRWHimApiError(
-                f"HAFAS meldete Fehler '{err_code}': "
+                f"Die Schnittstelle meldete Fehler '{err_code}': "
                 f"{entry.get('errTxt', 'ohne Beschreibung')}"
             )
 
         svc = entry.get("res")
         if not isinstance(svc, dict):
-            raise NRWHimApiError("HAFAS-Antwort enthielt keine Daten.")
+            raise NRWHimApiError("Die Antwort enthielt keine Daten.")
 
         common = svc.get("common", {})
         msgL = svc.get("msgL") or svc.get("msgList") or svc.get("himL") or []
 
         if not isinstance(msgL, list):
-            raise NRWHimApiError("Meldungsliste hatte ein unerwartetes Format.")
+            raise NRWHimApiError("Die Meldungsliste hatte ein unerwartetes Format.")
 
         messages: list[NRWMessage] = []
         for msg in msgL:
