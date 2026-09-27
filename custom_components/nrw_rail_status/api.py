@@ -22,7 +22,6 @@ from .const import (
     HAFAS_EXT,
     HAFAS_LANG,
     HAFAS_VERSION,
-    MAIN_URL,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -157,28 +156,8 @@ class NRWHimApi:
         """Initialize the API client."""
         self.session = session
 
-    async def _prepare_session(self) -> None:
-        """Lädt die Hauptseite, um Session-Cookies zu erhalten."""
-        headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/122.0.0.0 Safari/537.36"
-            ),
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "de-DE,de;q=0.9",
-        }
-
-        try:
-            async with self.session.get(MAIN_URL, headers=headers) as resp:
-                _LOGGER.debug("Hauptseite Status: %s", resp.status)
-        except Exception as err:
-            _LOGGER.warning("Fehler beim Vorbereiten der Session über Hauptseite: %s", err)
-
     async def fetch_messages(self) -> list[NRWMessage]:
         """Holt HIM-Meldungen von Zuginfo.nrw."""
-        await self._prepare_session()
-
         request_id = _random_request_id()
 
         now = datetime.now()
@@ -219,18 +198,6 @@ class NRWHimApi:
             ],
         }
 
-        rnd = random.randint(10**12, 10**13 - 1)
-        url = (
-            f"{BASE_URL}"
-            f"?requestId={request_id}"
-            f"&hciMethod=HimSearch"
-            f"&hciVersion={HAFAS_VERSION}"
-            f"&hciClientType={HAFAS_CLIENT_TYPE}"
-            f"&hciClientVersion={HAFAS_CLIENT_VERSION}"
-            f"&aid={HAFAS_AID}"
-            f"&rnd={rnd}"
-        )
-
         headers = {
             "User-Agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -244,9 +211,9 @@ class NRWHimApi:
             "Referer": "https://www.zuginfo.nrw/",
         }
 
-        _LOGGER.debug("Sende POST-Request an %s", url)
+        _LOGGER.debug("Sende POST-Request an %s", BASE_URL)
 
-        async with self.session.post(url, json=payload, headers=headers) as resp:
+        async with self.session.post(BASE_URL, json=payload, headers=headers) as resp:
             _LOGGER.debug("API Response HTTP Status: %s", resp.status)
 
             if resp.status != 200:
@@ -269,8 +236,6 @@ class NRWHimApi:
                 return []
 
             common = svc.get("common", {})
-            
-            # Prüfe verschiedene Feldnamen, in denen HAFAS die Nachrichten liefert
             msgL = svc.get("msgL") or svc.get("msgList") or svc.get("himL") or []
 
             if not isinstance(msgL, list):
