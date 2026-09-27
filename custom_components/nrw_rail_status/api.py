@@ -11,13 +11,24 @@ from html import unescape
 
 import aiohttp
 
-BASE_URL = "https://www.zuginfo.nrw/gate/"
-PRE_URL = "https://www.zuginfo.nrw/webapp/"
+from .const import (
+    BASE_URL,
+    HAFAS_AID,
+    HAFAS_CLIENT_ID,
+    HAFAS_CLIENT_LABEL,
+    HAFAS_CLIENT_NAME,
+    HAFAS_CLIENT_TYPE,
+    HAFAS_CLIENT_VERSION,
+    HAFAS_EXT,
+    HAFAS_LANG,
+    HAFAS_VERSION,
+    PRE_URL,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 
-def _random_request_id(length=8) -> str:
+def _random_request_id(length: int = 8) -> str:
     """Erzeugt eine zufällige Request-ID wie ein Browser."""
     return "".join(random.choices(string.ascii_letters + string.digits, k=length))
 
@@ -155,7 +166,7 @@ class NRWHimApi:
                 "Chrome/149.0.0.0 Mobile Safari/537.36"
             ),
             "Accept": "application/json",
-            "Accept-Language": "de,de-DE;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6",
+            "Accept-Language": "de,de-DE;q=0.9,en;q=0.8",
             "Content-Type": "application/json",
             "Origin": "https://www.zuginfo.nrw",
             "Referer": "https://www.zuginfo.nrw/webapp",
@@ -170,28 +181,28 @@ class NRWHimApi:
 
         request_id = _random_request_id()
 
-        # Dynamische Datumsberechnung (Gestern bis in 1 Jahr)
+        # Dynamische Datumsberechnung: Gestern bis in 1 Jahr
         now = datetime.now()
         date_begin = (now - timedelta(days=1)).strftime("%Y%m%d")
         date_end = (now + timedelta(days=365)).strftime("%Y%m%d")
 
         payload = {
             "id": request_id,
-            "ver": "1.24",
-            "lang": "deu",
+            "ver": HAFAS_VERSION,
+            "lang": HAFAS_LANG,
             "auth": {
                 "type": "AID",
-                "aid": "23lkjh63l456oisplergn",
+                "aid": HAFAS_AID,
             },
             "client": {
-                "id": "HAFAS",
-                "type": "WEB",
-                "name": "webapp",
-                "l": "vs_webapp",
-                "v": 10107,
+                "id": HAFAS_CLIENT_ID,
+                "type": HAFAS_CLIENT_TYPE,
+                "name": HAFAS_CLIENT_NAME,
+                "l": HAFAS_CLIENT_LABEL,
+                "v": HAFAS_CLIENT_VERSION,
             },
             "formatted": False,
-            "ext": "VRR.1",
+            "ext": HAFAS_EXT,
             "svcReqL": [
                 {
                     "meth": "HimSearch",
@@ -222,10 +233,10 @@ class NRWHimApi:
             f"{BASE_URL}"
             f"?requestId={request_id}"
             f"&hciMethod=HimSearch"
-            f"&hciVersion=1.24"
-            f"&hciClientType=WEB"
-            f"&hciClientVersion=10107"
-            f"&aid=23lkjh63l456oisplergn"
+            f"&hciVersion={HAFAS_VERSION}"
+            f"&hciClientType={HAFAS_CLIENT_TYPE}"
+            f"&hciClientVersion={HAFAS_CLIENT_VERSION}"
+            f"&aid={HAFAS_AID}"
             f"&rnd={rnd}"
         )
 
@@ -248,8 +259,6 @@ class NRWHimApi:
             if resp.status != 200:
                 _LOGGER.error("API returned HTTP Status %s", resp.status)
                 return []
-
-            raw_text = await resp.text()
 
             if "html" in resp.headers.get("Content-Type", "").lower():
                 _LOGGER.error("Server lieferte HTML statt JSON.")
