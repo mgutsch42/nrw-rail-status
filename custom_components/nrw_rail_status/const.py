@@ -3,6 +3,13 @@
 DOMAIN = "nrw_rail_status"
 DEFAULT_UPDATE_INTERVAL = 300
 
+# API Endpunkte für HAFAS / Zuginfo.nrw
+BASE_URL = "https://www.zuginfo.nrw/interfaces/mgate.exe"
+CLIENT_NAME = "HAFAS"
+CLIENT_TYPE = "WEB"
+CLIENT_ID = "DB-PROD"
+
+# Liste aller auswählbaren Linien
 NRW_LINES = [
     "RE 1", "RE 2", "RE 3", "RE 4", "RE 5", "RE 6", "RE 7", "RE 8", "RE 9",
     "RE 10", "RE 11", "RE 13", "RE 14", "RE 16", "RE 17", "RE 18", "RE 19",
@@ -14,7 +21,8 @@ NRW_LINES = [
     "S 11", "S 12", "S 19", "S 23", "S 28", "S 68",
 ]
 
+# Ausblendbare Kategorien
 CATEGORY_EXCLUDE_OPTIONS = {
     "elevator": "Aufzugsstörungen (Aufzug außer Betrieb)",
-    "construction": "Bauarbeiten / Gleisarbeiten",
+    "construction": "Allgemeine Bauarbeiten / Vorankündigungen",
 }
