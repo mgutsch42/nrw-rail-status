@@ -21,7 +21,7 @@ class NRWRailCard extends HTMLElement {
 
     if (messages.length === 0) {
       this.content.innerHTML = `
-        <ha-alert alert-type="success">Keine aktuellen Störungen auf deinen ausgewählten Linien.</ha-alert>
+        <ha-alert alert-type="success">Keine aktuellen Störungen auf deinen gewählten Linien.</ha-alert>
       `;
       return;
     }
@@ -33,9 +33,23 @@ class NRWRailCard extends HTMLElement {
         ? msg.products.map(p => `<span class="line-badge">${p.name}</span>`).join(" ") 
         : "";
       
+      let icon = "mdi:alert-circle";
+      let borderClass = "disruption-warning";
+
+      if (msg.category === "elevator") {
+        icon = "mdi:elevator-passenger-off";
+        borderClass = "disruption-info";
+      } else if (msg.category === "construction") {
+        icon = "mdi:cone";
+      } else if (msg.category === "cancellation") {
+        icon = "mdi:bus-clock";
+        borderClass = "disruption-error";
+      }
+
       html += `
-        <div class="disruption-item">
+        <div class="disruption-item ${borderClass}">
           <div class="disruption-header">
+            <ha-icon icon="${icon}" style="margin-right: 6px;"></ha-icon>
             <strong>${msg.title}</strong>
           </div>
           <div class="disruption-lines">${lines}</div>
@@ -47,15 +61,20 @@ class NRWRailCard extends HTMLElement {
     html += `</div>
       <style>
         .disruption-item {
-          border-left: 4px solid var(--warning-color, #ff9800);
+          border-left: 5px solid var(--warning-color, #ff9800);
           background: var(--card-background-color, #fff);
           padding: 12px;
           border-radius: 0 8px 8px 0;
           box-shadow: 0 1px 3px rgba(0,0,0,0.12);
         }
+        .disruption-warning { border-left-color: var(--warning-color, #ff9800); }
+        .disruption-error { border-left-color: var(--error-color, #f44336); }
+        .disruption-info { border-left-color: var(--info-color, #2196f3); }
         .disruption-header {
           font-size: 1em;
           margin-bottom: 6px;
+          display: flex;
+          align-items: center;
         }
         .disruption-lines {
           margin-bottom: 8px;
