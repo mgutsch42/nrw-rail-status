@@ -4,9 +4,11 @@ DOMAIN = "nrw_rail_status"
 
 # Update interval in seconds
 DEFAULT_UPDATE_INTERVAL = 60
+CONF_SCAN_INTERVAL = "scan_interval"
 
 # Sensor name
 SENSOR_NAME = "NRW Rail Status"
+ATTRIBUTION = "Data provided by zuginfo.nrw"
 
 # -----------------------------
 # HAFAS / Zuginfo API constants
@@ -15,7 +17,6 @@ SENSOR_NAME = "NRW Rail Status"
 # Base URL for the Zuginfo NRW gateway
 BASE_URL = "https://www.zuginfo.nrw/gate/"
 PRE_URL = "https://www.zuginfo.nrw/webapp/"
-
 
 # HAFAS API version
 HAFAS_VERSION = "1.24"
