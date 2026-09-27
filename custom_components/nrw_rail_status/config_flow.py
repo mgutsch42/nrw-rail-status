@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import voluptuous as vol
+
 from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.helpers.selector import (
@@ -19,7 +22,7 @@ class NRWRailStatusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
-    async def async_step_user(self, user_input=None):
+    async def async_step_user(self, user_input: dict[str, Any] | None = None):
         """Handle the initial step when adding the integration."""
         if self._async_current_entries():
             return self.async_abort(reason="single_instance_allowed")
@@ -33,15 +36,19 @@ class NRWRailStatusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @callback
     def async_get_options_flow(
         config_entry: config_entries.ConfigEntry,
-    ) -> NRWRailStatusOptionsFlowHandler:
+    ) -> config_entries.OptionsFlow:
         """Get the options flow for this handler."""
-        return NRWRailStatusOptionsFlowHandler()
+        return NRWRailStatusOptionsFlowHandler(config_entry)
 
 
 class NRWRailStatusOptionsFlowHandler(config_entries.OptionsFlow):
     """Handle options flow for NRW Rail Status."""
 
-    async def async_step_init(self, user_input=None):
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        """Initialize options flow."""
+        self.config_entry = config_entry
+
+    async def async_step_init(self, user_input: dict[str, Any] | None = None):
         """Manage the options menu in HA."""
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
@@ -58,9 +65,14 @@ class NRWRailStatusOptionsFlowHandler(config_entries.OptionsFlow):
                         mode=SelectSelectorMode.DROPDOWN,
                     )
                 ),
-                vol.Optional("excluded_categories", default=excluded_categories): SelectSelector(
+                vol.Optional(
+                    "excluded_categories", default=excluded_categories
+                ): SelectSelector(
                     SelectSelectorConfig(
-                        options=[{"value": k, "label": v} for k, v in CATEGORY_EXCLUDE_OPTIONS.items()],
+                        options=[
+                            {"value": k, "label": v}
+                            for k, v in CATEGORY_EXCLUDE_OPTIONS.items()
+                        ],
                         multiple=True,
                         mode=SelectSelectorMode.CHECKBOXES,
                     )
