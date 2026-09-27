@@ -7,8 +7,9 @@ DOMAIN: Final = "nrw_rail_status"
 # --- API ------------------------------------------------------------------
 # Die echten Daten liegen bei vrr.hafas.cloud (das ist die Technik hinter
 # Zuginfo.nrw). NICHT www.zuginfo.nrw - die Domain liefert nur die Webseite.
-BASE_URL: Final = "[vrr.hafas.cloud](https://vrr.hafas.cloud/bin/mgate.exe)"
-MAIN_URL: Final = "[vrr.hafas.cloud](https://vrr.hafas.cloud/)"
+BASE_URL: Final = "[vrr.hafas.cloud](https://vrr.hafas.cloud)" + "/bin/mgate.exe"
+MAIN_URL: Final = "[vrr.hafas.cloud](https://vrr.hafas.cloud)" + "/"
+
 
 HAFAS_VERSION: Final = "1.24"
 HAFAS_LANG: Final = "deu"
