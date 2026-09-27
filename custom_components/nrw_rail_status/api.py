@@ -28,7 +28,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def _random_request_id(length: int = 8) -> str:
-    """Erzeugt eine zufällige Request-ID wie ein Browser."""
+    """Erzeugt eine zufällige Request-ID."""
     return "".join(random.choices(string.ascii_letters + string.digits, k=length))
 
 
@@ -74,29 +74,33 @@ class NRWMessage:
         self.event_refs = raw.get("eventRefL", [])
         self.prod_refs = raw.get("affProdRefL", [])
 
-        # Aufgelöste Daten
+        # Aufgelöste Daten (Reihenfolge wichtig: edges ZUERST auflösen!)
+        self.edges = self._resolve_edges()
         self.locations = self._resolve_locations()
         self.products = self._resolve_products()
-        self.edges = self._resolve_edges()
         self.events = self._resolve_events()
 
     def _resolve_locations(self) -> list[dict]:
         locL = self.common.get("locL", [])
         result = []
+        seen_ids = set()
 
-        for edge in self._resolve_edges():
+        for edge in self.edges:
             for loc_idx in [edge.get("from"), edge.get("to")]:
                 if loc_idx is not None and 0 <= loc_idx < len(locL):
                     loc = locL[loc_idx]
-                    result.append(
-                        {
-                            "name": loc.get("name"),
-                            "id": loc.get("extId"),
-                            "type": loc.get("type"),
-                            "lat": loc.get("crd", {}).get("y"),
-                            "lon": loc.get("crd", {}).get("x"),
-                        }
-                    )
+                    ext_id = loc.get("extId")
+                    if ext_id and ext_id not in seen_ids:
+                        seen_ids.add(ext_id)
+                        result.append(
+                            {
+                                "name": loc.get("name"),
+                                "id": ext_id,
+                                "type": loc.get("type"),
+                                "lat": loc.get("crd", {}).get("y"),
+                                "lon": loc.get("crd", {}).get("x"),
+                            }
+                        )
         return result
 
     def _resolve_products(self) -> list[dict]:
@@ -157,7 +161,7 @@ class NRWHimApi:
         self.session = session
 
     async def fetch_messages(self) -> list[NRWMessage]:
-        """Holt HIM-Meldungen von Zuginfo.nrw."""
+        """Holt HIM-Meldungen ab."""
         request_id = _random_request_id()
 
         now = datetime.now()
@@ -207,8 +211,6 @@ class NRWHimApi:
             "Accept": "application/json, text/plain, */*",
             "Accept-Language": "de-DE,de;q=0.9",
             "Content-Type": "application/json",
-            "Origin": "https://www.zuginfo.nrw",
-            "Referer": "https://www.zuginfo.nrw/",
         }
 
         _LOGGER.debug("Sende POST-Request an %s", BASE_URL)
@@ -227,8 +229,6 @@ class NRWHimApi:
                 _LOGGER.error("Konnte JSON nicht parsen: %s. Body: %s", e, raw_body[:200])
                 return []
 
-            _LOGGER.debug("API Antwort erhalten: %s", str(data)[:300])
-
             try:
                 svc = data["svcResL"][0]["res"]
             except (KeyError, IndexError, TypeError) as e:
@@ -242,7 +242,7 @@ class NRWHimApi:
                 _LOGGER.warning("'msgL' ist keine Liste oder leer.")
                 return []
 
-            _LOGGER.info("Erfolgreich %s HIM-Meldungen von Zuginfo.nrw geladen.", len(msgL))
+            _LOGGER.info("Erfolgreich %s HIM-Meldungen geladen.", len(msgL))
 
             messages = []
             for msg in msgL:
