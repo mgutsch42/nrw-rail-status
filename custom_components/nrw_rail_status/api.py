@@ -211,6 +211,9 @@ class NRWHimApi:
                         "timeB": "000000",
                         "dateE": date_end,
                         "timeE": "235959",
+                        "himFltrL": [
+                            {"type": "CH", "mode": "INC", "value": "MESSAGELIST_CUSTOMER"}
+                        ],
                         "getParent": True,
                         "getChildren": True,
                     },
