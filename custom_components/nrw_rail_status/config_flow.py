@@ -11,7 +11,7 @@ from homeassistant.helpers.selector import (
     SelectSelectorMode,
 )
 
-from .const import DOMAIN, NRW_LINES
+from .const import CATEGORY_EXCLUDE_OPTIONS, DOMAIN, NRW_LINES
 
 
 class NRWRailStatusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -46,8 +46,8 @@ class NRWRailStatusOptionsFlowHandler(config_entries.OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        # HA liest config_entry automatisch über self.config_entry
         selected_lines = self.config_entry.options.get("filtered_lines", [])
+        excluded_categories = self.config_entry.options.get("excluded_categories", [])
 
         schema = vol.Schema(
             {
@@ -56,6 +56,13 @@ class NRWRailStatusOptionsFlowHandler(config_entries.OptionsFlow):
                         options=NRW_LINES,
                         multiple=True,
                         mode=SelectSelectorMode.DROPDOWN,
+                    )
+                ),
+                vol.Optional("excluded_categories", default=excluded_categories): SelectSelector(
+                    SelectSelectorConfig(
+                        options=[{"value": k, "label": v} for k, v in CATEGORY_EXCLUDE_OPTIONS.items()],
+                        multiple=True,
+                        mode=SelectSelectorMode.CHECKBOXES,
                     )
                 ),
             }
