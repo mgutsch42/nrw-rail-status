@@ -52,9 +52,9 @@ class NRWMessage:
         self.common = common
 
         # Basisdaten
-        self.id = raw.get("hid")
-        self.title = raw.get("head")
-        self.text_html = raw.get("text")
+        self.id = raw.get("hid") or raw.get("id")
+        self.title = raw.get("head") or raw.get("title")
+        self.text_html = raw.get("text") or raw.get("desc")
         self.text = _html_to_markdown(self.text_html)
 
         # Status / Metadaten
@@ -211,9 +211,6 @@ class NRWHimApi:
                         "timeB": "000000",
                         "dateE": date_end,
                         "timeE": "235959",
-                        "himFltrL": [
-                            {"type": "CH", "mode": "INC", "value": "MESSAGELIST_CUSTOMER"}
-                        ],
                         "getParent": True,
                         "getChildren": True,
                     },
@@ -272,10 +269,12 @@ class NRWHimApi:
                 return []
 
             common = svc.get("common", {})
-            msgL = svc.get("himL", [])
+            
+            # Prüfe verschiedene Feldnamen, in denen HAFAS die Nachrichten liefert
+            msgL = svc.get("msgL") or svc.get("msgList") or svc.get("himL") or []
 
             if not isinstance(msgL, list):
-                _LOGGER.warning("'himL' ist keine Liste oder leer.")
+                _LOGGER.warning("'msgL' ist keine Liste oder leer.")
                 return []
 
             _LOGGER.info("Erfolgreich %s HIM-Meldungen von Zuginfo.nrw geladen.", len(msgL))
