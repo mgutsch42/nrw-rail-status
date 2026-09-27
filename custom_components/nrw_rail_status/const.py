@@ -19,14 +19,19 @@ HAFAS_CLIENT_VERSION: Final = "1.0.0"
 HAFAS_EXT: Final = "VRR.1"
 
 # Konfigurations-Schlüssel
-CONF_LINES: Final = "lines"
+CONF_LINES: Final = "filtered_lines"
 CONF_REFRESH_INTERVAL: Final = "refresh_interval"
-
-# Standardwerte
 DEFAULT_REFRESH_INTERVAL: Final = 15  # Minuten
 
+# Kategorie-Ausschluss Option Mapping
+CATEGORY_EXCLUDE_OPTIONS: Final = {
+    "elevator": "Aufzugs- & Rolltreppenstörungen",
+    "construction": "Bauarbeiten & Fahrplanänderungen",
+    "disruption": "Aktuelle Störungen & Ausfälle",
+}
+
 # Auswählbare NRW-Linien für die Integration
-AVAILABLE_LINES: Final = [
+NRW_LINES: Final = [
     # Regional-Express (RE)
     "RE1",
     "RE2",
@@ -115,4 +120,5 @@ AVAILABLE_LINES: Final = [
     "S28",
     "S68",
 ]
-}
+
+AVAILABLE_LINES: Final = NRW_LINES
