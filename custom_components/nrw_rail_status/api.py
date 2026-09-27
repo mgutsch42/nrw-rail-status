@@ -6,7 +6,7 @@ import logging
 import random
 import re
 import string
-from datetime import datetime, timedelta
+from datetime import datetime
 from html import unescape
 
 import aiohttp
@@ -22,19 +22,22 @@ from .const import (
     HAFAS_EXT,
     HAFAS_LANG,
     HAFAS_VERSION,
-    MAIN_URL,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 
+class NRWHimApiError(Exception):
+    """Fehler bei der Abfrage der Zuginfo.nrw-Schnittstelle."""
+
+
 def _random_request_id(length: int = 8) -> str:
-    """Erzeugt eine zufällige Request-ID wie ein Browser."""
+    """Erzeugt eine zufaellige Anfrage-ID wie ein Browser."""
     return "".join(random.choices(string.ascii_letters + string.digits, k=length))
 
 
-def _html_to_markdown(html: str) -> str:
-    """Konvertiert HTML aus HIM-Meldungen in reinen Text."""
+def _html_to_text(html: str) -> str:
+    """Wandelt HTML aus den Meldungen in reinen Text um."""
     if not html:
         return ""
     text = unescape(html)
@@ -44,38 +47,33 @@ def _html_to_markdown(html: str) -> str:
 
 
 class NRWMessage:
-    """Repräsentiert eine einzelne HIM-Meldung aus Zuginfo.nrw."""
+    """Repraesentiert eine einzelne HIM-Meldung aus Zuginfo.nrw."""
 
     def __init__(self, raw: dict, common: dict) -> None:
-        """Initialize the message object."""
+        """Meldung anlegen."""
         self.raw = raw
         self.common = common
 
-        # Basisdaten
         self.id = raw.get("hid") or raw.get("id")
         self.title = raw.get("head") or raw.get("title")
         self.text_html = raw.get("text") or raw.get("desc")
-        self.text = _html_to_markdown(self.text_html)
+        self.text = _html_to_text(self.text_html)
 
-        # Status / Metadaten
         self.active = raw.get("act", True)
         self.priority = raw.get("prio")
         self.product = raw.get("prod")
         self.comp = raw.get("comp")
 
-        # Zeitliche Angaben
         self.start_date = raw.get("sDate")
         self.start_time = raw.get("sTime")
         self.end_date = raw.get("eDate")
         self.end_time = raw.get("eTime")
 
-        # Referenzen
         self.category_refs = raw.get("catRefL", [])
         self.edge_refs = raw.get("edgeRefL", [])
         self.event_refs = raw.get("eventRefL", [])
         self.prod_refs = raw.get("affProdRefL", [])
 
-        # Aufgelöste Daten
         self.locations = self._resolve_locations()
         self.products = self._resolve_products()
         self.edges = self._resolve_edges()
@@ -151,39 +149,17 @@ class NRWMessage:
 
 
 class NRWHimApi:
-    """Client für die HAFAS-HIM-API von Zuginfo.nrw."""
+    """Client fuer die HAFAS-HIM-Schnittstelle von Zuginfo.nrw."""
 
     def __init__(self, session: aiohttp.ClientSession) -> None:
-        """Initialize the API client."""
+        """Client anlegen."""
         self.session = session
-
-    async def _prepare_session(self) -> None:
-        """Lädt die Hauptseite, um Session-Cookies zu erhalten."""
-        headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/122.0.0.0 Safari/537.36"
-            ),
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "de-DE,de;q=0.9",
-        }
-
-        try:
-            async with self.session.get(MAIN_URL, headers=headers) as resp:
-                _LOGGER.debug("Hauptseite Status: %s", resp.status)
-        except Exception as err:
-            _LOGGER.warning("Fehler beim Vorbereiten der Session über Hauptseite: %s", err)
 
     async def fetch_messages(self) -> list[NRWMessage]:
         """Holt HIM-Meldungen von Zuginfo.nrw."""
-        await self._prepare_session()
-
         request_id = _random_request_id()
 
-        now = datetime.now()
-        date_begin = (now - timedelta(days=2)).strftime("%Y%m%d")
-        date_end = (now + timedelta(days=180)).strftime("%Y%m%d")
+        heute = datetime.now().strftime("%Y%m%d")
 
         payload = {
             "id": request_id,
@@ -207,9 +183,9 @@ class NRWHimApi:
                     "meth": "HimSearch",
                     "req": {
                         "maxNum": 500,
-                        "dateB": date_begin,
+                        "dateB": heute,
                         "timeB": "000000",
-                        "dateE": date_end,
+                        "dateE": heute,
                         "timeE": "235959",
                         "getParent": True,
                         "getChildren": True,
@@ -218,19 +194,6 @@ class NRWHimApi:
                 }
             ],
         }
-
-        rnd = random.randint(10**12, 10**13 - 1)
-        base = BASE_URL if BASE_URL.endswith("/") else f"{BASE_URL}/"
-        url = (
-            f"{base}"
-            f"?requestId={request_id}"
-            f"&hciMethod=HimSearch"
-            f"&hciVersion={HAFAS_VERSION}"
-            f"&hciClientType={HAFAS_CLIENT_TYPE}"
-            f"&hciClientVersion={HAFAS_CLIENT_VERSION}"
-            f"&aid={HAFAS_AID}"
-            f"&rnd={rnd}"
-        )
 
         headers = {
             "User-Agent": (
@@ -241,48 +204,60 @@ class NRWHimApi:
             "Accept": "application/json, text/plain, */*",
             "Accept-Language": "de-DE,de;q=0.9",
             "Content-Type": "application/json",
-            "Origin": "https://www.zuginfo.nrw",
-            "Referer": "https://www.zuginfo.nrw/",
+            "Origin": "[vrr.hafas.cloud](https://vrr.hafas.cloud)",
+            "Referer": "[vrr.hafas.cloud](https://vrr.hafas.cloud/)",
         }
 
-        _LOGGER.debug("Sende POST-Request an %s", url)
+        _LOGGER.debug("Sende HimSearch-Anfrage an %s", BASE_URL)
 
-        async with self.session.post(url, json=payload, headers=headers) as resp:
-            _LOGGER.debug("API Response HTTP Status: %s", resp.status)
-
-            if resp.status != 200:
-                _LOGGER.error("Zuginfo API lieferte HTTP Status %s", resp.status)
-                return []
-
-            try:
+        try:
+            async with self.session.post(
+                BASE_URL, json=payload, headers=headers
+            ) as resp:
+                if resp.status != 200:
+                    body = await resp.text()
+                    raise NRWHimApiError(
+                        f"HAFAS antwortete mit Status {resp.status}: {body[:300]}"
+                    )
                 data = await resp.json(content_type=None)
-            except Exception as e:
-                raw_body = await resp.text()
-                _LOGGER.error("Konnte JSON nicht parsen: %s. Body: %s", e, raw_body[:200])
-                return []
+        except aiohttp.ClientError as err:
+            raise NRWHimApiError(f"Verbindungsfehler: {err}") from err
 
-            _LOGGER.debug("API Antwort erhalten: %s", str(data)[:300])
+        # Fehler, die die Bahn IM Datenpaket meldet (nicht als HTTP-Status).
+        entry = (data.get("svcResL") or [{}])[0]
+        err_code = entry.get("err")
+        if err_code and err_code != "OK":
+            raise NRWHimApiError(
+                f"HAFAS meldete Fehler '{err_code}': "
+                f"{entry.get('errTxt', 'ohne Beschreibung')}"
+            )
 
+        svc = entry.get("res")
+        if not isinstance(svc, dict):
+            raise NRWHimApiError("HAFAS-Antwort enthielt keine Daten.")
+
+        common = svc.get("common", {})
+        msgL = svc.get("msgL") or svc.get("msgList") or svc.get("himL") or []
+
+        if not isinstance(msgL, list):
+            raise NRWHimApiError("Meldungsliste hatte ein unerwartetes Format.")
+
+        messages: list[NRWMessage] = []
+        for msg in msgL:
             try:
-                svc = data["svcResL"][0]["res"]
-            except (KeyError, IndexError, TypeError) as e:
-                _LOGGER.error("Unerwartete JSON-Struktur der API: %s | Inhalt: %s", e, data)
-                return []
+                messages.append(NRWMessage(msg, common))
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.warning("Eine Meldung konnte nicht gelesen werden: %s", err)
 
-            common = svc.get("common", {})
-            msgL = svc.get("msgL") or svc.get("msgList") or svc.get("himL") or []
+        _LOGGER.info("%s HIM-Meldungen geladen.", len(messages))
 
-            if not isinstance(msgL, list):
-                _LOGGER.warning("'msgL' ist keine Liste oder leer.")
-                return []
+        # Zeigt im Log, wie die Linien wirklich geschrieben werden.
+        for m in messages[:10]:
+            for p in m.products:
+                _LOGGER.debug(
+                    "Linie in der Meldung: name=%r line=%r",
+                    p.get("name"),
+                    p.get("line"),
+                )
 
-            _LOGGER.info("Erfolgreich %s HIM-Meldungen von Zuginfo.nrw geladen.", len(msgL))
-
-            messages = []
-            for msg in msgL:
-                try:
-                    messages.append(NRWMessage(msg, common))
-                except Exception as e:
-                    _LOGGER.error("Fehler beim Erstellen der NRWMessage: %s", e)
-
-            return messages
+        return messages
