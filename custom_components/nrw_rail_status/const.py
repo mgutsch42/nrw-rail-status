@@ -3,9 +3,9 @@
 DOMAIN = "nrw_rail_status"
 DEFAULT_UPDATE_INTERVAL = 300
 
-# Zuginfo.nrw HAFAS API Parameter
+# Aktualisierte HAFAS-API Endpunkte (VRR / Zuginfo NRW)
 MAIN_URL = "https://www.zuginfo.nrw/"
-BASE_URL = "https://www.zuginfo.nrw/interfaces/mgate.exe"
+BASE_URL = "https://auskunft.vrr.de/standard/mgate.exe"
 
 HAFAS_VERSION = "1.58"
 HAFAS_LANG = "deu"
