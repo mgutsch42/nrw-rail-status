@@ -1,7 +1,7 @@
 {
   "name": "NRW Rail Status",
   "content_in_root": false,
-  "domains": ["nrw_rail_status"],
+  "domain": "nrw_rail_status",
   "country": ["DE"],
-  "homeassistant": "2024.0.0"
+  "homeassistant": "2024.1.0"
 }
