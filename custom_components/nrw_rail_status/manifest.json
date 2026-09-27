@@ -4,10 +4,11 @@
   "version": "0.3.0",
   "documentation": "https://github.com/mgutsch42/nrw-rail-status",
   "issue_tracker": "https://github.com/mgutsch42/nrw-rail-status/issues",
-  "requirements": [],
+  "dependencies": [],
   "codeowners": ["@mgutsch42"],
+  "requirements": [],
   "iot_class": "cloud_polling",
-  "integration_type": "hub",
+  "integration_type": "service",
   "config_flow": true,
   "platforms": ["sensor"],
   "loggers": ["custom_components.nrw_rail_status"]
