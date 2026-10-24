@@ -37,7 +37,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator = NRWRailStatusDataUpdateCoordinator(
         hass, session, entry_data=dict(entry.data or {}), options=options
     )
-    await coordinator.async_config_entry_first_refresh()
+
+    # Bewusst NICHT async_config_entry_first_refresh(): Schlaegt der erste
+    # Abruf fehl (Quelle offline, Seitenstruktur geaendert), darf die
+    # Einrichtung daran nicht scheitern. Der Coordinator holt die Daten
+    # anschliessend im regulaeren Takt.
+    try:
+        await coordinator.async_refresh()
+    except Exception as err:  # noqa: BLE001
+        _LOGGER.warning(
+            "Erster Abruf von Zuginfo.nrw fehlgeschlagen, richte trotzdem ein: %s",
+            err,
+        )
 
     hass.data[DOMAIN][entry.entry_id] = coordinator
 
