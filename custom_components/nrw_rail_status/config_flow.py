@@ -1,4 +1,14 @@
-"""Config flow for NRW Rail Status integration."""
+"""Config flow for NRW Rail Status integration.
+
+Bewusst ohne SelectSelectorMode und NumberSelectorMode: Diese Konstanten
+haengen von der Home-Assistant-Version ab. Stattdessen werden die klassischen
+Voluptuous-Typen benutzt, die in jeder Version verfuegbar sind:
+
+  * cv.multi_select({...})  -> Mehrfachauswahl als Kaestchen/Dropdown
+  * vol.All(vol.Coerce(int), vol.Range(...)) -> Zahleneingabe mit Grenzen
+
+Damit laesst sich das Formular in jeder HA-Version laden.
+"""
 
 from __future__ import annotations
 
@@ -9,14 +19,7 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.core import callback
-from homeassistant.helpers.selector import (
-    NumberSelector,
-    NumberSelectorConfig,
-    NumberSelectorMode,
-    SelectSelector,
-    SelectSelectorConfig,
-    SelectSelectorMode,
-)
+from homeassistant.helpers import config_validation as cv
 
 from .const import (
     CATEGORY_EXCLUDE_OPTIONS,
@@ -31,6 +34,34 @@ from .const import (
 )
 
 
+def _build_schema(current: dict[str, Any]) -> vol.Schema:
+    """Formular aus den aktuellen Werten bauen."""
+    # Linienliste als Auswahl: Schluessel und Anzeigetext sind hier identisch.
+    lines = {name: name for name in NRW_LINES}
+
+    # Kategorien: Schluessel ist die Ziffer, angezeigt wird der Klartext.
+    cats = {key: label for key, label in CATEGORY_EXCLUDE_OPTIONS.items()}
+
+    return vol.Schema(
+        {
+            vol.Optional(
+                CONF_LINES, default=current.get(CONF_LINES, [])
+            ): cv.multi_select(lines),
+            vol.Optional(
+                CONF_EXCLUDED_CATEGORIES,
+                default=current.get(CONF_EXCLUDED_CATEGORIES, []),
+            ): cv.multi_select(cats),
+            vol.Optional(
+                CONF_REFRESH_INTERVAL,
+                default=current.get(CONF_REFRESH_INTERVAL, DEFAULT_REFRESH_INTERVAL),
+            ): vol.All(
+                vol.Coerce(int),
+                vol.Range(min=MIN_REFRESH_INTERVAL, max=MAX_REFRESH_INTERVAL),
+            ),
+        }
+    )
+
+
 class NRWRailStatusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Konfiguration beim Hinzufuegen der Integration."""
 
@@ -41,11 +72,12 @@ class NRWRailStatusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Erster Schritt beim Hinzufuegen."""
         if user_input is not None:
+            lines = user_input.get(CONF_LINES, [])
             return self.async_create_entry(
                 title="NRW Rail Status",
-                data={CONF_LINES: user_input.get(CONF_LINES, [])},
+                data={CONF_LINES: lines},
                 options={
-                    CONF_LINES: user_input.get(CONF_LINES, []),
+                    CONF_LINES: lines,
                     CONF_EXCLUDED_CATEGORIES: user_input.get(
                         CONF_EXCLUDED_CATEGORIES, []
                     ),
@@ -57,7 +89,7 @@ class NRWRailStatusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="user",
-            data_schema=self._build_schema({}),
+            data_schema=_build_schema({}),
             errors={},
         )
 
@@ -69,55 +101,13 @@ class NRWRailStatusConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Options-Flow bereitstellen."""
         return NRWRailStatusOptionsFlowHandler()
 
-    @staticmethod
-    def _build_schema(current: dict[str, Any]) -> vol.Schema:
-        """Formular aus den aktuellen Werten bauen."""
-        return vol.Schema(
-            {
-                vol.Optional(
-                    CONF_LINES, default=current.get(CONF_LINES, [])
-                ): SelectSelector(
-                    SelectSelectorConfig(
-                        options=NRW_LINES,
-                        multiple=True,
-                        mode=SelectSelectorMode.DROPDOWN,
-                    )
-                ),
-                vol.Optional(
-                    CONF_EXCLUDED_CATEGORIES,
-                    default=current.get(CONF_EXCLUDED_CATEGORIES, []),
-                ): SelectSelector(
-                    SelectSelectorConfig(
-                        options=[
-                            {"value": k, "label": v}
-                            for k, v in CATEGORY_EXCLUDE_OPTIONS.items()
-                        ],
-                        multiple=True,
-                        mode=SelectSelectorMode.CHECKBOXES,
-                    )
-                ),
-                vol.Optional(
-                    CONF_REFRESH_INTERVAL,
-                    default=current.get(CONF_REFRESH_INTERVAL, DEFAULT_REFRESH_INTERVAL),
-                ): NumberSelector(
-                    NumberSelectorConfig(
-                        min=MIN_REFRESH_INTERVAL,
-                        max=MAX_REFRESH_INTERVAL,
-                        step=1,
-                        unit_of_measurement="min",
-                        mode=NumberSelectorMode.BOX,
-                    )
-                ),
-            }
-        )
-
 
 class NRWRailStatusOptionsFlowHandler(config_entries.OptionsFlow):
     """Options-Flow.
 
-    Arbeitet mit der von Home Assistant bereitgestellten Referenz
-    ``self.config_entry``; ein eigenes Feld gleichen Namens wuerde in
-    aktuellen HA-Versionen einen Fehler ausloesen.
+    Nutzt die von Home Assistant bereitgestellte Referenz ``self.config_entry``;
+    ein eigenes Feld gleichen Namens wuerde in aktuellen Versionen einen Fehler
+    ausloesen.
     """
 
     async def async_step_init(
@@ -133,5 +123,5 @@ class NRWRailStatusOptionsFlowHandler(config_entries.OptionsFlow):
 
         return self.async_show_form(
             step_id="init",
-            data_schema=NRWRailStatusConfigFlow._build_schema(current),
+            data_schema=_build_schema(current),
         )
