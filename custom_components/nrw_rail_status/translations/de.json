@@ -2,13 +2,41 @@
   "config": {
     "step": {
       "user": {
-        "title": "NRW Rail Status",
-        "description": "This integration displays current HIM disruptions from the NRW rail network (Zuginfo.nrw / HAFAS HIM)."
+        "title": "NRW Rail Status einrichten",
+        "description": "Linien auswählen, deren Störungen und Bauarbeiten angezeigt werden sollen.",
+        "data": {
+          "filtered_lines": "Linien",
+          "excluded_categories": "Kategorien ausschließen",
+          "refresh_interval": "Aktualisierung (Minuten)"
+        }
       }
     },
     "abort": {
-      "single_instance_allowed": "This integration is already configured."
+      "already_configured": "Die Integration ist bereits eingerichtet."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "NRW Rail Status – Optionen",
+        "data": {
+          "filtered_lines": "Linien",
+          "excluded_categories": "Kategorien ausschließen",
+          "refresh_interval": "Aktualisierung (Minuten)"
+        }
+      }
+    }
+  },
+  "services": {
+    "diagnose": {
+      "name": "Diagnose",
+      "description": "Prüft beide Wege zu Zuginfo.nrw und zeigt, was gelesen wurde.",
+      "fields": {
+        "lines": {
+          "name": "Linien",
+          "description": "Optional: Linienkürzel wie RE 13."
+        }
+      }
     }
   }
 }
-
