@@ -486,7 +486,7 @@ class NRWHimApi:
         ``CATEGORY_EXCLUDE_OPTIONS``, die NICHT angezeigt werden sollen.
         """
         self.session = session
-        self.lines = [_clean_line_label(x) for x in (lines or [])]
+        self.lines = self._normalize_lines(lines)
         self.excluded_categories = [str(c) for c in (excluded_categories or [])]
         self.categories = self._build_categories()
         self.parser = ZuginfoWebParser()
@@ -555,6 +555,23 @@ class NRWHimApi:
             joined = ",".join(self.lines)
             params.append("lineLbl=" + url_quote(joined, safe=""))
         return WEB_URL + "?" + "&".join(params)
+
+    @staticmethod
+    def _normalize_lines(lines) -> list[str]:
+        """Linienangabe in eine Liste wandeln.
+
+        Nimmt sowohl ["RE 13"] als auch "RE 13,RB 91" entgegen. Ohne das wird
+        ein uebergebener Text zeichenweise zerlegt.
+        """
+        if lines is None:
+            return []
+        if isinstance(lines, str):
+            lines = [x for x in lines.split(",") if x.strip()]
+        out = []
+        for item in lines:
+            if isinstance(item, str) and item.strip():
+                out.append(_clean_line_label(item))
+        return out
 
     async def _fetch_web(self) -> list[NRWMessage]:
         url = self._web_url()
@@ -674,19 +691,95 @@ class NRWHimApi:
 # Diagnose: prueft beide Wege und beschreibt die gefundene Struktur
 # ---------------------------------------------------------------------------
 
+# Abfragevarianten der Meldungsseite. Sie werden der Reihe nach getestet;
+# die ergiebigste liefert die Meldungen.
+_VARIANTS = [
+    ("standard", WEB_URL + "?{params}"),
+    ("rss1", WEB_URL + "?rss=1&{params}"),
+    ("rss_full", WEB_URL + "?rss=2&{params}"),
+    ("ohne_filter", WEB_URL),
+    ("meldungen_path", WEB_URL + "meldungen?{params}"),
+]
+
+_UA_BROWSER = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+)
+
+
+async def _probe_variants(
+    session: aiohttp.ClientSession, lines: list[str]
+) -> dict[str, Any]:
+    """Testet mehrere Abfragevarianten und beschreibt jede.
+
+    Liefert je Variante: Status, Laenge, Zahl der gefundenen Meldungen und
+    einen Auszug. Damit laesst sich ohne Terminal sehen, welcher Weg traegt.
+    """
+    params = "categories=0,4,2,3,1&sParam=LMOD_&sIncrease=DESC"
+    if lines:
+        params += "&lineLbl=" + url_quote(",".join(lines), safe="")
+
+    parser = ZuginfoWebParser()
+    results: dict[str, Any] = {}
+
+    for name, template in _VARIANTS:
+        url = template.format(params=params)
+        entry: dict[str, Any] = {"url": url}
+        try:
+            async with session.get(
+                url,
+                headers={
+                    "User-Agent": _UA_BROWSER,
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                    "Accept-Language": "de-DE,de;q=0.9",
+                },
+                timeout=aiohttp.ClientTimeout(total=30),
+            ) as resp:
+                body = await resp.text()
+                entry["status"] = resp.status
+                entry["html_length"] = len(body)
+
+                msgs = parser.parse(body)
+                entry["count"] = len(msgs)
+                if msgs:
+                    entry["sample"] = [m.as_dict() for m in msgs[:2]]
+
+                # Auszug: bei kurzen Antworten alles, sonst die Mitte
+                if len(body) <= 3000:
+                    entry["excerpt"] = body
+                else:
+                    entry["excerpt"] = body[:1500] + "\n---\n" + body[1500:3000]
+
+                # Hinweise auf nachgeladene Inhalte
+                low = body.lower()
+                entry["hints"] = {
+                    "has_article": "<article" in low,
+                    "has_card": 'class="card' in low or "class='card" in low,
+                    "has_script": "<script" in low,
+                    "json_urls": re.findall(r"[\"'/]([\w./-]*(?:api|json|feed|rss)[\w./-]*)", low)[:8],
+                }
+        except Exception as err:  # noqa: BLE001
+            entry["ok"] = False
+            entry["error"] = f"{type(err).__name__}: {err}"
+        results[name] = entry
+
+    return results
+
+
 async def async_run_diagnostics(
     session: aiohttp.ClientSession, lines: list[str] | None = None
 ) -> dict[str, Any]:
-    """Fuehrt beide Abfragen aus und beschreibt das Ergebnis.
+    """Prueft alle Wege zu Zuginfo.nrw und beschreibt das Ergebnis.
 
     Gedacht fuer den Aufruf aus dem Home-Assistant-Dienst
-    ``nrw_rail_status.diagnose``.
+    ``nrw_rail_status.diagnose``. Uebergibt man ``lines`` als Text
+    ("RE 13,RB 91"), wird er in eine Liste gewandelt.
     """
-    out: dict[str, Any] = {"ok": True}
+    norm_lines = NRWHimApi._normalize_lines(lines)
+    out: dict[str, Any] = {"ok": True, "lines_normalized": norm_lines}
 
-    # Weg 1: oeffentliche Seite
-    web = NRWHimApi(session, lines=lines)
-    web.diagnostics["debug_html"] = True
+    # Weg 1: oeffentliche Seite (regulaerer Ablauf)
+    web = NRWHimApi(session, lines=norm_lines)
     try:
         msgs = await web.fetch_messages()
         out["web"] = {
@@ -694,13 +787,18 @@ async def async_run_diagnostics(
             "count": len(msgs),
             "lines_filter": web.lines,
             "sample": [m.as_dict() for m in msgs[:3]],
-            "snippet": (web.diagnostics.get("html_snippet") or "")[:600],
         }
     except Exception as err:  # noqa: BLE001
-        out["web"] = {"ok": False, "error": str(err)}
+        out["web"] = {"ok": False, "error": f"{type(err).__name__}: {err}"}
 
-    # Weg 2: HAFAS
-    hafas = NRWHimApi(session, lines=lines)
+    # Weg 2: alle Abfragevarianten durchprobieren
+    try:
+        out["varianten"] = await _probe_variants(session, norm_lines)
+    except Exception as err:  # noqa: BLE001
+        out["varianten"] = {"ok": False, "error": f"{type(err).__name__}: {err}"}
+
+    # Weg 3: HAFAS
+    hafas = NRWHimApi(session, lines=norm_lines)
     try:
         msgs = await hafas.fetch_messages(use_hafas=True)
         out["hafas"] = {
@@ -709,6 +807,6 @@ async def async_run_diagnostics(
             "sample": [m.as_dict() for m in msgs[:3]],
         }
     except Exception as err:  # noqa: BLE001
-        out["hafas"] = {"ok": False, "error": str(err)}
+        out["hafas"] = {"ok": False, "error": f"{type(err).__name__}: {err}"}
 
     return out
