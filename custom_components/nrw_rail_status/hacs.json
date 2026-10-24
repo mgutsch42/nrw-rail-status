@@ -1,7 +1,6 @@
 {
   "name": "NRW Rail Status",
-  "content_in_root": false,
-  "domain": "nrw_rail_status",
-  "country": ["DE"],
-  "homeassistant": "2024.1.0"
+  "render_readme": true,
+  "homeassistant": "2024.6.0",
+  "zip_release": false
 }
