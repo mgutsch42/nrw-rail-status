@@ -9,12 +9,18 @@ DOMAIN: Final = "nrw_rail_status"
 # serverseitig gerendert, ohne Session und ohne Schluessel.
 WEB_URL: Final = "https://www.zuginfo.nrw/"
 
-# Weg 2 (Rueckfall): die Schnittstelle hinter der Webseite. Der Endpunkt
-# verlangt eine endpunkt-spezifische Pruefsumme (checkV); ohne sie antwortet
-# er mit einem Fehler im Datenpaket. Bleibt erhalten, wird aber nur benutzt,
-# wenn die Meldungsseite nichts liefert.
-BASE_URL: Final = "https://vrr.hafas.cloud/bin/mgate.exe"
-MAIN_URL: Final = "https://vrr.hafas.cloud/"
+# Weg 2: die Schnittstelle hinter der Webseite. Sie liegt NICHT unter
+# vrr.hafas.cloud, sondern unter dem eigenen Host von zuginfo.nrw.
+# Der genaue Aufruf wurde aus der laufenden Webseite entnommen:
+#
+#   POST https://www.zuginfo.nrw/gate/?requestId=..&hciMethod=HimSearch
+#        &hciVersion=1.24&hciClientType=WEB&hciClientVersion=10109&aid=..&rnd=..
+#   Origin/Referer: https://www.zuginfo.nrw
+#
+# Wichtig: Der Zeitraum (dateB/dateE) umfasst dort ein Jahr, nicht einen Tag.
+# Nur so erscheinen auch anstehende Bauarbeiten.
+BASE_URL: Final = "https://www.zuginfo.nrw/gate/"
+MAIN_URL: Final = "https://www.zuginfo.nrw/"
 
 HAFAS_VERSION: Final = "1.24"
 HAFAS_LANG: Final = "deu"
@@ -23,8 +29,13 @@ HAFAS_CLIENT_ID: Final = "HAFAS"
 HAFAS_CLIENT_TYPE: Final = "WEB"
 HAFAS_CLIENT_NAME: Final = "webapp"
 HAFAS_CLIENT_LABEL: Final = "vs_webapp"
-HAFAS_CLIENT_VERSION: Final = 10107
+HAFAS_CLIENT_VERSION: Final = 10109
 HAFAS_EXT: Final = "VRR.1"
+
+# Zeitraum der Abfrage. Die Webseite fragt ein ganzes Fahrplanjahr ab, damit
+# auch Bauarbeiten erscheinen, die erst in Wochen beginnen.
+HAFAS_DATE_B: Final = "20251214"
+HAFAS_DATE_E: Final = "20261212"
 
 # --- Konfigurationsschluessel --------------------------------------------
 CONF_LINES: Final = "filtered_lines"
