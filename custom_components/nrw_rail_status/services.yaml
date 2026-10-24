@@ -1,0 +1,16 @@
+diagnose:
+  name: Diagnose
+  description: >
+    Prueft beide Wege zu Zuginfo.nrw (oeffentliche Meldungsseite und HAFAS)
+    und gibt zurueck, welche Meldungen gelesen wurden. Nuetzlich, um zu
+    sehen, ob der Parser zur aktuellen Seitenstruktur passt.
+  fields:
+    lines:
+      name: Linien
+      description: >
+        Optional. Linienkuerzel wie "RE 13", "RB 91", "S 8". Ohne Angabe
+        werden die in der Integration konfigurierten Linien verwendet.
+      required: false
+      example: "RE 13,RB 91,S 8"
+      selector:
+        text:
