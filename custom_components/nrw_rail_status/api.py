@@ -36,6 +36,8 @@ import aiohttp
 from .const import (
     BASE_URL,
     HAFAS_AID,
+    HAFAS_DATE_B,
+    HAFAS_DATE_E,
     HAFAS_CLIENT_ID,
     HAFAS_CLIENT_LABEL,
     HAFAS_CLIENT_NAME,
@@ -512,6 +514,20 @@ class NRWHimApi:
         web_error: str | None = None
         messages: list[NRWMessage] = []
 
+        # Hauptweg ist die Schnittstelle: die Webseite selbst rendert nichts
+        # im HTML, sie holt die Meldungen per JavaScript von /gate/.
+        if not use_hafas:
+            try:
+                messages = await self._fetch_hafas()
+                self.diagnostics["hafas"] = {"ok": True, "count": len(messages)}
+                if messages:
+                    self.last_error = None
+                    return messages
+            except Exception as err:  # noqa: BLE001
+                web_error = f"{type(err).__name__}: {err}"
+                self.diagnostics["hafas"] = {"ok": False, "error": web_error}
+                _LOGGER.warning("Schnittstelle nicht nutzbar: %s", web_error)
+
         if not use_hafas:
             try:
                 messages = await self._fetch_web()
@@ -529,16 +545,6 @@ class NRWHimApi:
             if messages:
                 self.last_error = None
                 return messages
-
-        # Rueckfall (oder ausdruecklich gewuenscht): HAFAS versuchen
-        try:
-            messages = await self._fetch_hafas()
-            self.diagnostics["hafas"] = {"ok": True, "count": len(messages)}
-            self.last_error = None
-            return messages
-        except Exception as err:  # noqa: BLE001
-            self.diagnostics["hafas"] = {"ok": False, "error": f"{type(err).__name__}: {err}"}
-            _LOGGER.warning("HAFAS-Weg nicht nutzbar: %s", err)
 
         self.last_error = web_error or "Keine Meldungen von beiden Wegen erhalten."
         return []
@@ -602,9 +608,31 @@ class NRWHimApi:
     # --- Weg 2: HAFAS (unveraendert aus der Vorversion) -------------------
 
     async def _fetch_hafas(self) -> list[NRWMessage]:
+        """Meldungen ueber die Schnittstelle hinter der Webseite holen.
+
+        Der Aufruf wurde aus der laufenden Seite entnommen:
+
+            POST https://www.zuginfo.nrw/gate/?requestId=..&hciMethod=HimSearch
+                 &hciVersion=1.24&hciClientType=WEB&hciClientVersion=10109
+                 &aid=..&rnd=..
+
+        Herkunft (Origin/Referer) muss www.zuginfo.nrw sein, sonst antwortet
+        der Server nicht. Der Zeitraum im Body umfasst ein Jahr, damit auch
+        anstehende Bauarbeiten enthalten sind.
+        """
         request_id = _random_request_id()
         rnd = random.randint(10**12, 10**13 - 1)
-        heute = datetime.now().strftime("%Y%m%d")
+
+        # Kategorienfilter: die Webseite fragt Meldungen, Bauarbeiten,
+        # Stoerungen und Informationen ab (HIMCAT 0,4,2,3).
+        alle_cats = ["0", "4", "2", "3"]
+        cats = [c for c in alle_cats if c not in self.excluded_categories] or alle_cats
+
+        him_fltr = [
+            {"type": "CH", "mode": "INC", "value": "MESSAGELIST_CUSTOMER"}
+        ]
+        for c in cats:
+            him_fltr.append({"type": "HIMCAT", "mode": "INC", "value": int(c)})
 
         payload = {
             "id": request_id,
@@ -624,10 +652,12 @@ class NRWHimApi:
                 "meth": "HimSearch",
                 "req": {
                     "maxNum": 500,
-                    "dateB": heute,
+                    "dateB": HAFAS_DATE_B,
                     "timeB": "000000",
-                    "dateE": heute,
+                    "dateE": HAFAS_DATE_E,
                     "timeE": "235959",
+                    "himFltrL": him_fltr,
+                    "sortL": ["LMOD_DESC"],
                     "getParent": True,
                     "getChildren": True,
                 },
@@ -637,41 +667,49 @@ class NRWHimApi:
 
         base = BASE_URL if BASE_URL.endswith("/") else f"{BASE_URL}/"
         url = (
-            f"{base}?requestId={request_id}&hciMethod=HimSearch"
-            f"&hciVersion={HAFAS_VERSION}&hciClientType={HAFAS_CLIENT_TYPE}"
-            f"&hciClientVersion={HAFAS_CLIENT_VERSION}&aid={HAFAS_AID}&rnd={rnd}"
+            f"{base}?requestId={request_id}"
+            f"&hciMethod=HimSearch"
+            f"&hciVersion={HAFAS_VERSION}"
+            f"&hciClientType={HAFAS_CLIENT_TYPE}"
+            f"&hciClientVersion={HAFAS_CLIENT_VERSION}"
+            f"&aid={HAFAS_AID}"
+            f"&rnd={rnd}"
         )
+
         headers = {
-            "User-Agent": _UA,
-            "Accept": "application/json, text/plain, */*",
-            "Accept-Language": "de-DE,de;q=0.9",
-            "Content-Type": "application/json",
-            "Origin": "https://vrr.hafas.cloud",
-            "Referer": "https://vrr.hafas.cloud/",
+            "accept": "*/*",
+            "accept-language": "de,de-DE;q=0.9,en;q=0.8",
+            "content-type": "application/json",
+            "origin": "https://www.zuginfo.nrw",
+            "referer": "https://www.zuginfo.nrw/",
+            "user-agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36"
+            ),
         }
 
         async with self.session.post(
             url, json=payload, headers=headers,
-            timeout=aiohttp.ClientTimeout(total=30),
+            timeout=aiohttp.ClientTimeout(total=45),
         ) as resp:
             if resp.status != 200:
                 body = await resp.text()
                 raise NRWHimApiError(
-                    f"HAFAS antwortete mit Status {resp.status}: {body[:200]}"
+                    f"Schnittstelle antwortete mit Status {resp.status}: {body[:200]}"
                 )
             data = await resp.json(content_type=None)
 
         entry = (data.get("svcResL") or [{}])[0]
         err_code = entry.get("err")
-        if err_code and err_code != "OK":
+        svc = entry.get("res")
+
+        # Manche Antworten tragen die Meldungen trotz err="OK" nicht direkt,
+        # sondern unter res.msgL
+        if not isinstance(svc, dict):
             raise NRWHimApiError(
                 f"Schnittstelle meldete '{err_code}': "
-                f"{entry.get('errTxt', 'ohne Beschreibung')}"
+                f"{entry.get('errTxt', 'ohne Beschreibung')} - keine Daten"
             )
-
-        svc = entry.get("res")
-        if not isinstance(svc, dict):
-            raise NRWHimApiError("Die Antwort enthielt keine Daten.")
 
         common = svc.get("common", {})
         msgL = svc.get("msgL") or svc.get("msgList") or svc.get("himL") or []
@@ -684,6 +722,15 @@ class NRWHimApi:
                 messages.append(NRWMessage(msg, common))
             except Exception as err:  # noqa: BLE001
                 _LOGGER.warning("Eine Meldung konnte nicht gelesen werden: %s", err)
+
+        # Linienfilter anwenden, falls gewuenscht
+        if self.lines:
+            messages = [
+                m for m in messages
+                if any(m.matches_line(line) for line in self.lines)
+            ]
+
+        self.diagnostics["hafas_raw_count"] = len(msgL)
         return messages
 
 
