@@ -4,8 +4,11 @@
   "version": "1.0.1",
   "documentation": "https://github.com/mgutsch42/nrw-rail-status",
   "issue_tracker": "https://github.com/mgutsch42/nrw-rail-status/issues",
-  "codeowners": ["@mgutsch42"],
+  "codeowners": [
+    "@mgutsch42"
+  ],
   "requirements": [],
   "iot_class": "cloud_polling",
-  "config_flow": true
+  "config_flow": true,
+  "integration_type": "service"
 }
