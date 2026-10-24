@@ -2,15 +2,25 @@
   "config": {
     "step": {
       "user": {
-        "title": "NRW Rail Status",
-        "description": "Diese Integration zeigt aktuelle HIM‑Störungen aus dem NRW‑Bahnnetz (Zuginfo.nrw / HAFAS HIM) an."
+        "title": "Set up NRW Rail Status",
+        "data": {
+          "filtered_lines": "Lines",
+          "excluded_categories": "Exclude categories",
+          "refresh_interval": "Refresh interval (minutes)"
+        }
       }
-    },
-    "abort": {
-      "single_instance_allowed": "Diese Integration ist bereits eingerichtet."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "NRW Rail Status – Options",
+        "data": {
+          "filtered_lines": "Lines",
+          "excluded_categories": "Exclude categories",
+          "refresh_interval": "Refresh interval (minutes)"
+        }
+      }
     }
   }
 }
-
-
-
