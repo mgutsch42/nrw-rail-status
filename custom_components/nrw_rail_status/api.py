@@ -29,6 +29,7 @@ import string
 from datetime import datetime
 from html import unescape
 from typing import Any
+from urllib.parse import quote as url_quote
 
 import aiohttp
 
@@ -518,9 +519,12 @@ class NRWHimApi:
                     "ok": True, "count": len(messages), "url": self._web_url(),
                 }
             except Exception as err:  # noqa: BLE001
-                web_error = str(err)
+                web_error = f"{type(err).__name__}: {err}"
                 self.diagnostics["web"] = {"ok": False, "error": web_error}
-                _LOGGER.warning("Meldungsseite nicht lesbar: %s", err)
+                _LOGGER.warning("Meldungsseite nicht lesbar: %s", web_error)
+                # Vollstaendigen Stacktrace ins Log, damit sich Fehler in der
+                # Seitenstruktur nachvollziehen lassen.
+                _LOGGER.debug("Details zum Fehler:", exc_info=True)
 
             if messages:
                 self.last_error = None
@@ -533,7 +537,7 @@ class NRWHimApi:
             self.last_error = None
             return messages
         except Exception as err:  # noqa: BLE001
-            self.diagnostics["hafas"] = {"ok": False, "error": str(err)}
+            self.diagnostics["hafas"] = {"ok": False, "error": f"{type(err).__name__}: {err}"}
             _LOGGER.warning("HAFAS-Weg nicht nutzbar: %s", err)
 
         self.last_error = web_error or "Keine Meldungen von beiden Wegen erhalten."
@@ -549,7 +553,7 @@ class NRWHimApi:
         ]
         if self.lines:
             joined = ",".join(self.lines)
-            params.append("lineLbl=" + aiohttp.helpers.quote(joined, safe=""))
+            params.append("lineLbl=" + url_quote(joined, safe=""))
         return WEB_URL + "?" + "&".join(params)
 
     async def _fetch_web(self) -> list[NRWMessage]:
